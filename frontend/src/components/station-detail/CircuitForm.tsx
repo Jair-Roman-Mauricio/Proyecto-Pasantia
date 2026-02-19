@@ -21,14 +21,28 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
   const [fd, setFd] = useState('1.0');
   const [isUps, setIsUps] = useState(false);
   const [secondaryBarId, setSecondaryBarId] = useState<number | null>(null);
+  const [tertiaryBarId, setTertiaryBarId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const mdKw = (parseFloat(piKw) || 0) * (parseFloat(fd) || 1);
+  const otherBars = bars.filter((b) => b.id !== barId);
+  const tertiaryOptions = otherBars.filter((b) => b.id !== secondaryBarId);
+
+  const handleSecondaryChange = (id: number | null) => {
+    setSecondaryBarId(id);
+    if (id && tertiaryBarId === id) {
+      setTertiaryBarId(null);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!denomination || !name || !piKw) {
       setError('Complete los campos obligatorios');
+      return;
+    }
+    if (isUps && (!secondaryBarId || !tertiaryBarId)) {
+      setError('UPS requiere seleccionar ambas barras de conexion');
       return;
     }
     setIsSubmitting(true);
@@ -43,6 +57,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
       fd: parseFloat(fd),
       is_ups: isUps,
       secondary_bar_id: isUps ? secondaryBarId : undefined,
+      tertiary_bar_id: isUps ? tertiaryBarId : undefined,
     };
 
     try {
@@ -66,8 +81,6 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
       setIsSubmitting(false);
     }
   };
-
-  const otherBars = bars.filter((b) => b.id !== barId);
 
   return (
     <Modal isOpen onClose={onClose} title="Agregar Nuevo Circuito" size="lg">
@@ -102,12 +115,29 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
           <label htmlFor="isUps" className="text-sm text-[var(--text-secondary)]">Es UPS?</label>
         </div>
         {isUps && otherBars.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Barra secundaria de conexion</label>
-            <select value={secondaryBarId || ''} onChange={(e) => setSecondaryBarId(Number(e.target.value))} className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]">
-              <option value="">Seleccione barra</option>
-              {otherBars.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Conexion 1</label>
+              <select
+                value={secondaryBarId || ''}
+                onChange={(e) => handleSecondaryChange(e.target.value ? Number(e.target.value) : null)}
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+              >
+                <option value="">Seleccione barra</option>
+                {otherBars.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Conexion 2</label>
+              <select
+                value={tertiaryBarId || ''}
+                onChange={(e) => setTertiaryBarId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+              >
+                <option value="">Seleccione barra</option>
+                {tertiaryOptions.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
           </div>
         )}
         {error && <p className="text-sm text-red-500">{error}</p>}

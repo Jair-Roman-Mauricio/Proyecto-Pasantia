@@ -16,6 +16,7 @@ class CircuitCreate(BaseModel):
     status: str = "operative_normal"
     is_ups: bool = False
     secondary_bar_id: Optional[int] = None
+    tertiary_bar_id: Optional[int] = None
     force: bool = False  # override energy check
 
 
@@ -37,6 +38,7 @@ class CircuitResponse(BaseModel):
     id: int
     bar_id: int
     secondary_bar_id: Optional[int] = None
+    tertiary_bar_id: Optional[int] = None
     denomination: str
     name: str
     description: Optional[str] = None

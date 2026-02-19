@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Plus } from 'lucide-react';
-import type { Station, Bar, Circuit, BarPowerSummary } from '../../types';
+import type { Station, Bar, Circuit, SubCircuit, BarPowerSummary } from '../../types';
 import { stationService } from '../../services/stationService';
 import { circuitService } from '../../services/circuitService';
 import { useAuth } from '../../context/AuthContext';
@@ -12,7 +12,9 @@ import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
 import PowerCards from './PowerCards';
 import CircuitTable from './CircuitTable';
+import SubCircuitTable from './SubCircuitTable';
 import CircuitForm from './CircuitForm';
+import SubCircuitForm from './SubCircuitForm';
 import ObservationsModal from './ObservationsModal';
 import StatusChangeModal from './StatusChangeModal';
 
@@ -33,6 +35,8 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
   const [showCircuitForm, setShowCircuitForm] = useState(false);
   const [showObservations, setShowObservations] = useState(false);
   const [showStatusChange, setShowStatusChange] = useState(false);
+  const [subCircuits, setSubCircuits] = useState<SubCircuit[]>([]);
+  const [showSubCircuitForm, setShowSubCircuitForm] = useState(false);
   const [formBarId, setFormBarId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -56,6 +60,20 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
       circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
     }
   }, [selectedBar]);
+
+  useEffect(() => {
+    if (selectedCircuit) {
+      circuitService.getSubCircuits(selectedCircuit.id).then(setSubCircuits).catch(() => setSubCircuits([]));
+    } else {
+      setSubCircuits([]);
+    }
+  }, [selectedCircuit]);
+
+  const loadSubCircuits = () => {
+    if (selectedCircuit) {
+      circuitService.getSubCircuits(selectedCircuit.id).then(setSubCircuits);
+    }
+  };
 
   const toggleBar = (barId: number) => {
     setExpandedBars((prev) => {
@@ -165,6 +183,11 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
+                {isAdmin && selectedCircuit && (
+                  <Button variant="secondary" size="sm" onClick={() => setShowSubCircuitForm(true)}>
+                    <Plus size={14} className="mr-1" /> Agregar Sub-circuito
+                  </Button>
+                )}
                 {isAdmin && !isEditMode && (
                   <Button variant="secondary" size="sm" onClick={() => setIsEditMode(true)}>Modo Edicion</Button>
                 )}
@@ -180,12 +203,23 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
 
             {powerSummary && <PowerCards summary={powerSummary} />}
 
-            <CircuitTable
-              circuits={barCircuits[selectedBar.id] || []}
-              isEditMode={isEditMode}
-              onDelete={handleCircuitDeleted}
-              showDenomination={!selectedCircuit}
-            />
+            {selectedCircuit ? (
+              <SubCircuitTable
+                subCircuits={subCircuits}
+                isEditMode={isEditMode}
+                onDelete={loadSubCircuits}
+              />
+            ) : (
+              <CircuitTable
+                circuits={barCircuits[selectedBar.id] || []}
+                isEditMode={isEditMode}
+                onDelete={handleCircuitDeleted}
+                onView={(circuit) => setSelectedCircuit(circuit)}
+                onNavigateToBar={(bar) => { handleBarSelect(bar); if (!expandedBars.has(bar.id)) toggleBar(bar.id); }}
+                bars={bars}
+                barName={selectedBar.name}
+              />
+            )}
           </div>
         ) : (
           <Card>
@@ -197,6 +231,9 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
       {/* Modals */}
       {showCircuitForm && formBarId && (
         <CircuitForm barId={formBarId} bars={bars} onClose={() => setShowCircuitForm(false)} onCreated={handleCircuitCreated} />
+      )}
+      {showSubCircuitForm && selectedCircuit && (
+        <SubCircuitForm circuitId={selectedCircuit.id} onClose={() => setShowSubCircuitForm(false)} onCreated={() => { setShowSubCircuitForm(false); loadSubCircuits(); }} />
       )}
       {showObservations && (selectedBar || selectedCircuit) && (
         <ObservationsModal barId={selectedBar?.id} circuitId={selectedCircuit?.id} onClose={() => setShowObservations(false)} />

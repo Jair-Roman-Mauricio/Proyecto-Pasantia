@@ -1,22 +1,47 @@
+import { useState } from 'react';
 import { Trash2, Eye } from 'lucide-react';
-import type { Circuit } from '../../types';
+import type { Circuit, Bar } from '../../types';
 import { CIRCUIT_STATUS_COLORS } from '../../config/constants';
-import { circuitService } from '../../services/circuitService';
 import Table from '../ui/Table';
 import Button from '../ui/Button';
+import Modal from '../ui/Modal';
+import DeleteCircuitModal from './DeleteCircuitModal';
 
 interface CircuitTableProps {
   circuits: Circuit[];
   isEditMode: boolean;
   onDelete: () => void;
+  onView: (circuit: Circuit) => void;
+  onNavigateToBar: (bar: Bar) => void;
+  bars: Bar[];
+  barName?: string;
   showDenomination?: boolean;
 }
 
-export default function CircuitTable({ circuits, isEditMode, onDelete, showDenomination = true }: CircuitTableProps) {
-  const handleDelete = async (circuit: Circuit) => {
-    if (!confirm(`Eliminar circuito "${circuit.name}"?`)) return;
-    await circuitService.delete(circuit.id);
-    onDelete();
+export default function CircuitTable({ circuits, isEditMode, onDelete, onView, onNavigateToBar, bars, barName = '', showDenomination = true }: CircuitTableProps) {
+  const [circuitToDelete, setCircuitToDelete] = useState<Circuit | null>(null);
+  const [upsCircuit, setUpsCircuit] = useState<Circuit | null>(null);
+
+  const getBarName = (barId: number | null) => {
+    if (!barId) return '';
+    return bars.find((b) => b.id === barId)?.name || '';
+  };
+
+  const handleView = (c: Circuit) => {
+    if (c.is_ups) {
+      setUpsCircuit(c);
+    } else {
+      onView(c);
+    }
+  };
+
+  const handleUpsChoice = (barId: number | null) => {
+    if (!barId) return;
+    const bar = bars.find((b) => b.id === barId);
+    if (bar) {
+      setUpsCircuit(null);
+      onNavigateToBar(bar);
+    }
   };
 
   const columns = [
@@ -43,7 +68,7 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, showDenom
           key: 'actions',
           header: 'Acciones',
           render: (c: Circuit) => (
-            <Button variant="danger" size="sm" onClick={() => handleDelete(c)}>
+            <Button variant="danger" size="sm" onClick={() => setCircuitToDelete(c)}>
               <Trash2 size={14} />
             </Button>
           ),
@@ -51,8 +76,8 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, showDenom
       : [{
           key: 'actions',
           header: 'Acciones',
-          render: (_c: Circuit) => (
-            <Button variant="ghost" size="sm">
+          render: (c: Circuit) => (
+            <Button variant="ghost" size="sm" onClick={() => handleView(c)}>
               <Eye size={14} className="mr-1" /> Ver
             </Button>
           ),
@@ -60,15 +85,49 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, showDenom
   ];
 
   return (
-    <Table
-      columns={columns}
-      data={circuits}
-      rowKey={(c) => c.id}
-      rowClassName={(c) => {
-        if (c.status === 'reserve_r') return 'bg-yellow-50 dark:bg-yellow-900/10';
-        if (c.status === 'reserve_equipped_re') return 'bg-blue-50 dark:bg-blue-900/10';
-        return '';
-      }}
-    />
+    <>
+      <Table
+        columns={columns}
+        data={circuits}
+        rowKey={(c) => c.id}
+        rowClassName={(c) => {
+          if (c.status === 'reserve_r') return 'bg-yellow-50 dark:bg-yellow-900/10';
+          if (c.status === 'reserve_equipped_re') return 'bg-blue-50 dark:bg-blue-900/10';
+          return '';
+        }}
+      />
+      <DeleteCircuitModal
+        circuit={circuitToDelete}
+        barName={barName}
+        onCancel={() => setCircuitToDelete(null)}
+        onConfirm={() => { setCircuitToDelete(null); onDelete(); }}
+      />
+      {upsCircuit && (
+        <Modal isOpen onClose={() => setUpsCircuit(null)} title="Circuito UPS - Elegir conexion" size="sm">
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--text-secondary)]">
+              El circuito <strong>{upsCircuit.name}</strong> es UPS y esta conectado a dos barras. Seleccione a cual desea ir:
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => handleUpsChoice(upsCircuit.secondary_bar_id)}
+              >
+                {getBarName(upsCircuit.secondary_bar_id)}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleUpsChoice(upsCircuit.tertiary_bar_id)}
+              >
+                {getBarName(upsCircuit.tertiary_bar_id)}
+              </Button>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setUpsCircuit(null)}>Cancelar</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }

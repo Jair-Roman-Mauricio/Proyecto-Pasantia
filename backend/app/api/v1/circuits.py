@@ -73,20 +73,27 @@ def create_circuit(
             )
 
     # Validate UPS
-    if data.is_ups and not data.secondary_bar_id:
-        raise HTTPException(
-            status_code=400,
-            detail="UPS requiere una barra secundaria (secondary_bar_id)",
-        )
-    if data.is_ups and data.secondary_bar_id == bar_id:
-        raise HTTPException(
-            status_code=400,
-            detail="La barra secundaria debe ser diferente a la primaria",
-        )
+    if data.is_ups:
+        if not data.secondary_bar_id or not data.tertiary_bar_id:
+            raise HTTPException(
+                status_code=400,
+                detail="UPS requiere dos barras de conexion (secondary_bar_id y tertiary_bar_id)",
+            )
+        if data.secondary_bar_id == bar_id or data.tertiary_bar_id == bar_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Las barras de conexion deben ser diferentes a la primaria",
+            )
+        if data.secondary_bar_id == data.tertiary_bar_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Las dos barras de conexion deben ser diferentes entre si",
+            )
 
     circuit = Circuit(
         bar_id=bar_id,
         secondary_bar_id=data.secondary_bar_id if data.is_ups else None,
+        tertiary_bar_id=data.tertiary_bar_id if data.is_ups else None,
         denomination=data.denomination,
         name=data.name,
         description=data.description,
@@ -122,6 +129,8 @@ def create_circuit(
             "pi_kw": float(circuit.pi_kw),
             "md_kw": float(circuit.md_kw),
             "is_ups": circuit.is_ups,
+            "secondary_bar_id": circuit.secondary_bar_id,
+            "tertiary_bar_id": circuit.tertiary_bar_id,
         },
     )
 

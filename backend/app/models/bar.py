@@ -40,4 +40,8 @@ class Bar(Base):
         back_populates="secondary_bar",
         foreign_keys="Circuit.secondary_bar_id",
     )
+    tertiary_circuits = relationship(
+        "Circuit",
+        foreign_keys="Circuit.tertiary_bar_id",
+    )
     observations = relationship("Observation", back_populates="bar")

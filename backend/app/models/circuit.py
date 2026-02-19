@@ -18,6 +18,9 @@ class Circuit(Base):
     secondary_bar_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("bars.id"), nullable=True
     )
+    tertiary_bar_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("bars.id"), nullable=True
+    )
     denomination: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -42,6 +45,7 @@ class Circuit(Base):
 
     bar = relationship("Bar", back_populates="circuits", foreign_keys=[bar_id])
     secondary_bar = relationship("Bar", back_populates="secondary_circuits", foreign_keys=[secondary_bar_id])
+    tertiary_bar = relationship("Bar", foreign_keys=[tertiary_bar_id])
     sub_circuits = relationship("SubCircuit", back_populates="circuit", cascade="all, delete-orphan")
     observations = relationship("Observation", back_populates="circuit")
     notifications = relationship("Notification", back_populates="circuit")

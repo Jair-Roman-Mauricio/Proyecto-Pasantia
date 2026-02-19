@@ -59,6 +59,7 @@ export interface Circuit {
   id: number;
   bar_id: number;
   secondary_bar_id: number | null;
+  tertiary_bar_id: number | null;
   denomination: string;
   name: string;
   description: string | null;

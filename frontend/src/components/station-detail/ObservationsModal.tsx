@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { Observation } from '../../types';
 import { OBSERVATION_SEVERITY_COLORS } from '../../config/constants';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../config/api';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
@@ -12,6 +14,8 @@ interface ObservationsModalProps {
 }
 
 export default function ObservationsModal({ barId, circuitId, onClose }: ObservationsModalProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [observations, setObservations] = useState<Observation[]>([]);
   const [content, setContent] = useState('');
   const [severity, setSeverity] = useState('recommendation');
@@ -27,6 +31,11 @@ export default function ObservationsModal({ barId, circuitId, onClose }: Observa
   useEffect(() => {
     loadObservations();
   }, [barId, circuitId]);
+
+  const handleDelete = async (id: number) => {
+    await api.delete(`/observations/${id}`);
+    loadObservations();
+  };
 
   const handleSubmit = async () => {
     if (!content) return;
@@ -56,9 +65,20 @@ export default function ObservationsModal({ barId, circuitId, onClose }: Observa
               <span className="text-xs font-medium text-[var(--text-secondary)]">
                 {obs.user_role} - {obs.user_name}
               </span>
-              <span className="text-xs text-[var(--text-muted)]">
-                {new Date(obs.created_at).toLocaleDateString()}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--text-muted)]">
+                  {new Date(obs.created_at).toLocaleDateString()}
+                </span>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleDelete(obs.id)}
+                    className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-[var(--text-muted)] hover:text-red-500 transition-colors cursor-pointer"
+                    title="Eliminar observacion"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
             </div>
             <p className="text-sm text-[var(--text-primary)]">{obs.content}</p>
           </div>

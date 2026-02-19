@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, check_permission
+from app.dependencies import get_current_user, check_permission, require_admin
 from app.models.user import User
 from app.models.observation import Observation
 from app.schemas.observation import ObservationCreate, ObservationResponse
+from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/observations", tags=["Observations"])
 
@@ -84,3 +85,33 @@ def create_observation(
     db.refresh(obs)
 
     return _enrich(obs, db)
+
+
+@router.delete("/{observation_id}", status_code=204)
+def delete_observation(
+    observation_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    obs = db.query(Observation).filter(Observation.id == observation_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observacion no encontrada")
+
+    obs_info = {
+        "content": obs.content,
+        "severity": obs.severity,
+        "user_id": obs.user_id,
+        "circuit_id": obs.circuit_id,
+        "bar_id": obs.bar_id,
+    }
+
+    db.delete(obs)
+    db.commit()
+
+    AuditService(db).log(
+        user=admin,
+        action="DELETE_OBSERVATION",
+        entity_type="observation",
+        entity_id=observation_id,
+        details=obs_info,
+    )
