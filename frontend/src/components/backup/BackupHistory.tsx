@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, RotateCcw } from 'lucide-react';
+import { Plus, RotateCcw, Trash2 } from 'lucide-react';
 import api from '../../config/api';
 import type { Backup } from '../../types';
 import Table from '../ui/Table';
@@ -11,6 +11,7 @@ export default function BackupHistory() {
   const [backups, setBackups] = useState<Backup[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [showRestore, setShowRestore] = useState<Backup | null>(null);
+  const [showDelete, setShowDelete] = useState<Backup | null>(null);
   const [description, setDescription] = useState('');
   const [confirmText, setConfirmText] = useState('');
 
@@ -35,6 +36,13 @@ export default function BackupHistory() {
     setConfirmText('');
   };
 
+  const handleDelete = async () => {
+    if (!showDelete) return;
+    await api.delete(`/backups/${showDelete.id}`);
+    setShowDelete(null);
+    loadBackups();
+  };
+
   const columns = [
     { key: 'id', header: 'ID' },
     { key: 'creator_name', header: 'Creado por' },
@@ -42,9 +50,14 @@ export default function BackupHistory() {
     { key: 'description', header: 'Descripcion' },
     { key: 'size_bytes', header: 'Tamano', render: (b: Backup) => b.size_bytes ? `${(b.size_bytes / 1024).toFixed(1)} KB` : '-' },
     { key: 'actions', header: 'Acciones', render: (b: Backup) => (
-      <Button variant="secondary" size="sm" onClick={() => setShowRestore(b)}>
-        <RotateCcw size={14} className="mr-1" /> Restaurar
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="secondary" size="sm" onClick={() => setShowRestore(b)}>
+          <RotateCcw size={14} className="mr-1" /> Restaurar
+        </Button>
+        <Button variant="danger" size="sm" onClick={() => setShowDelete(b)}>
+          <Trash2 size={14} className="mr-1" /> Eliminar
+        </Button>
+      </div>
     )},
   ];
 
@@ -83,6 +96,25 @@ export default function BackupHistory() {
             <div className="flex gap-2 justify-end">
               <Button variant="secondary" onClick={() => setShowRestore(null)}>Cancelar</Button>
               <Button variant="danger" onClick={handleRestore} disabled={confirmText !== 'CONFIRMAR'}>Restaurar</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showDelete && (
+        <Modal isOpen onClose={() => setShowDelete(null)} title="Eliminar Backup" size="md">
+          <div className="space-y-4">
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <p className="text-sm text-red-600 dark:text-red-400 font-medium">
+                Esta accion eliminara permanentemente este backup y no se podra recuperar.
+              </p>
+            </div>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Backup: {showDelete.file_name} ({new Date(showDelete.created_at).toLocaleString()})
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" onClick={() => setShowDelete(null)}>Cancelar</Button>
+              <Button variant="danger" onClick={handleDelete}>Eliminar</Button>
             </div>
           </div>
         </Modal>

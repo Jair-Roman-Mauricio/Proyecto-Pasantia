@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -18,7 +20,10 @@ def get_audit_logs(
     entity_type: str | None = None,
     entity_id: int | None = None,
     user_id: int | None = None,
+    action: str | None = None,
     is_flagged: bool | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -31,8 +36,14 @@ def get_audit_logs(
         query = query.filter(AuditLog.entity_id == entity_id)
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
+    if action:
+        query = query.filter(AuditLog.action.ilike(f"%{action}%"))
     if is_flagged is not None:
         query = query.filter(AuditLog.is_flagged == is_flagged)
+    if start_date:
+        query = query.filter(AuditLog.action_date >= start_date)
+    if end_date:
+        query = query.filter(AuditLog.action_date <= end_date)
 
     return (
         query.order_by(AuditLog.action_date.desc())

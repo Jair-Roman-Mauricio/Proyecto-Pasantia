@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.database import get_db
 from app.dependencies import require_admin
@@ -12,6 +13,8 @@ from app.models.bar import Bar
 from app.models.circuit import Circuit
 from app.models.sub_circuit import SubCircuit
 from app.models.observation import Observation
+from app.models.notification import Notification
+from app.models.request import Request
 from app.models.audit_log import AuditLog
 from app.models.backup import Backup
 from app.schemas.backup import BackupCreate, BackupResponse
@@ -26,6 +29,8 @@ def _serialize_model(obj) -> dict:
     for col in obj.__table__.columns:
         val = getattr(obj, col.name)
         if isinstance(val, datetime):
+            val = val.isoformat()
+        elif hasattr(val, "isoformat"):
             val = val.isoformat()
         elif hasattr(val, "__float__"):
             val = float(val)
@@ -60,13 +65,14 @@ def create_backup(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    # Serialize all station-related data
     backup_data = {
         "stations": [_serialize_model(s) for s in db.query(Station).all()],
         "bars": [_serialize_model(b) for b in db.query(Bar).all()],
         "circuits": [_serialize_model(c) for c in db.query(Circuit).all()],
         "sub_circuits": [_serialize_model(sc) for sc in db.query(SubCircuit).all()],
         "observations": [_serialize_model(o) for o in db.query(Observation).all()],
+        "notifications": [_serialize_model(n) for n in db.query(Notification).all()],
+        "requests": [_serialize_model(r) for r in db.query(Request).all()],
     }
 
     if data.includes_audit:
@@ -124,9 +130,11 @@ def restore_backup(
     data = backup.backup_data
 
     try:
-        # Delete current data in reverse dependency order
-        db.query(SubCircuit).delete()
+        # Delete in reverse dependency order (children first)
         db.query(Observation).delete()
+        db.query(Notification).delete()
+        db.query(Request).delete()
+        db.query(SubCircuit).delete()
         db.query(Circuit).delete()
         db.query(Bar).delete()
         db.query(Station).delete()
@@ -136,27 +144,28 @@ def restore_backup(
 
         db.flush()
 
-        # Restore stations
+        # Restore in dependency order (parents first)
         for s in data.get("stations", []):
             db.execute(Station.__table__.insert().values(**s))
 
-        # Restore bars
         for b in data.get("bars", []):
             db.execute(Bar.__table__.insert().values(**b))
 
-        # Restore circuits
         for c in data.get("circuits", []):
             db.execute(Circuit.__table__.insert().values(**c))
 
-        # Restore sub_circuits
         for sc in data.get("sub_circuits", []):
             db.execute(SubCircuit.__table__.insert().values(**sc))
 
-        # Restore observations
         for o in data.get("observations", []):
             db.execute(Observation.__table__.insert().values(**o))
 
-        # Restore audit logs
+        for n in data.get("notifications", []):
+            db.execute(Notification.__table__.insert().values(**n))
+
+        for r in data.get("requests", []):
+            db.execute(Request.__table__.insert().values(**r))
+
         if backup.includes_audit and "audit_logs" in data:
             for a in data.get("audit_logs", []):
                 db.execute(AuditLog.__table__.insert().values(**a))
@@ -167,6 +176,15 @@ def restore_backup(
         calculator = EnergyCalculator(db)
         for station in db.query(Station).all():
             calculator.recalculate_station(station.id)
+
+        # Reset sequences so new inserts don't collide with restored IDs
+        for tbl in ["stations", "bars", "circuits", "sub_circuits",
+                     "observations", "notifications", "requests", "audit_logs"]:
+            db.execute(text(
+                f"SELECT setval(pg_get_serial_sequence('{tbl}', 'id'), "
+                f"COALESCE((SELECT MAX(id) FROM {tbl}), 1))"
+            ))
+        db.commit()
 
     except Exception as e:
         db.rollback()
@@ -183,3 +201,30 @@ def restore_backup(
     )
 
     return {"message": "Backup restaurado exitosamente"}
+
+
+@router.delete("/{backup_id}")
+def delete_backup(
+    backup_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    backup = db.query(Backup).filter(Backup.id == backup_id).first()
+    if not backup:
+        raise HTTPException(status_code=404, detail="Backup no encontrado")
+
+    file_name = backup.file_name
+
+    db.delete(backup)
+    db.commit()
+
+    audit = AuditService(db)
+    audit.log(
+        user=admin,
+        action="DELETE_BACKUP",
+        entity_type="backup",
+        entity_id=backup_id,
+        details={"backup_file": file_name},
+    )
+
+    return {"message": "Backup eliminado exitosamente"}
