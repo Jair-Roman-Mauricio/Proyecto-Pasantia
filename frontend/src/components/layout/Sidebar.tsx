@@ -39,7 +39,7 @@ export default function Sidebar() {
   const options = viewMode === 'admin' && user?.role === 'admin' ? adminOptions : opersacOptions;
 
   return (
-    <aside className="w-64 min-h-screen flex flex-col" style={{ backgroundColor: 'var(--sidebar-bg)', color: 'var(--sidebar-text)' }}>
+    <aside className="w-64 shrink-0 h-screen sticky top-0 flex flex-col overflow-y-auto" style={{ backgroundColor: 'var(--sidebar-bg)', color: 'var(--sidebar-text)' }}>
       {/* Logo */}
       <div className="p-4 border-b border-gray-700">
         <div className="flex items-center gap-3">

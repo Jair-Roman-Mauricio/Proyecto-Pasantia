@@ -29,19 +29,23 @@ export default function ReportsView() {
   };
 
   const handleExport = async () => {
-    const params: Record<string, string> = {};
-    if (startDate) params.start_date = startDate;
-    if (endDate) params.end_date = endDate;
+    try {
+      const params: Record<string, string> = {};
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
 
-    const response = await api.get('/reports/export/excel', { params, responseType: 'blob' });
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = startDate || endDate
-      ? `reportes_${startDate || 'inicio'}_${endDate || 'fin'}.xlsx`
-      : 'reportes.xlsx';
-    link.click();
-    window.URL.revokeObjectURL(url);
+      const response = await api.get('/reports/export/excel', { params, responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = startDate || endDate
+        ? `reportes_${startDate || 'inicio'}_${endDate || 'fin'}.xlsx`
+        : 'reportes.xlsx';
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Error al exportar el reporte. Intente nuevamente.');
+    }
   };
 
   return (
@@ -106,7 +110,7 @@ export default function ReportsView() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={requestsData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="station_name" stroke="var(--text-muted)" fontSize={10} angle={-45} textAnchor="end" height={80} />
+                <XAxis dataKey="station_name" stroke="var(--text-muted)" fontSize={10} interval={0} />
                 <YAxis stroke="var(--text-muted)" fontSize={11} />
                 <Tooltip />
                 <Legend />
