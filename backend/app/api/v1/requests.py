@@ -10,6 +10,7 @@ from app.models.station import Station
 from app.models.bar import Bar
 from app.models.circuit import Circuit
 from app.models.request import Request
+from app.models.sub_circuit import SubCircuit
 from app.schemas.request import RequestCreate, RequestReject, RequestResponse
 from app.services.energy_calculator import EnergyCalculator
 from app.services.audit_service import AuditService
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/requests", tags=["Requests"])
 def _enrich_request(req: Request, db: Session) -> RequestResponse:
     opersac = db.query(User).filter(User.id == req.opersac_user_id).first()
     station = db.query(Station).filter(Station.id == req.station_id).first()
+    circuit = db.query(Circuit).filter(Circuit.id == req.circuit_id).first() if req.circuit_id else None
     return RequestResponse(
         id=req.id,
         opersac_user_id=req.opersac_user_id,
@@ -27,7 +29,15 @@ def _enrich_request(req: Request, db: Session) -> RequestResponse:
         station_id=req.station_id,
         station_name=station.name if station else None,
         bar_type=req.bar_type,
+        circuit_id=req.circuit_id,
+        circuit_name=circuit.name if circuit else None,
+        local_item=req.local_item,
         requested_load_kw=req.requested_load_kw,
+        fd=req.fd,
+        sub_circuit_name=req.sub_circuit_name,
+        sub_circuit_description=req.sub_circuit_description,
+        sub_circuit_itm=req.sub_circuit_itm,
+        sub_circuit_mm2=req.sub_circuit_mm2,
         justification=req.justification,
         status=req.status,
         rejection_reason=req.rejection_reason,
@@ -36,6 +46,21 @@ def _enrich_request(req: Request, db: Session) -> RequestResponse:
         created_at=req.created_at,
         updated_at=req.updated_at,
     )
+
+
+@router.get("/circuit-options/{bar_id}")
+def get_circuit_options_for_request(
+    bar_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(check_permission("send_requests")),
+):
+    circuits = (
+        db.query(Circuit.id, Circuit.denomination, Circuit.name)
+        .filter(Circuit.bar_id == bar_id)
+        .order_by(Circuit.denomination)
+        .all()
+    )
+    return [{"id": c.id, "denomination": c.denomination, "name": c.name} for c in circuits]
 
 
 @router.get("", response_model=list[RequestResponse])
@@ -75,7 +100,14 @@ def create_request(
         opersac_user_id=user.id,
         station_id=data.station_id,
         bar_type=data.bar_type,
+        circuit_id=data.circuit_id,
+        local_item=data.local_item,
         requested_load_kw=data.requested_load_kw,
+        fd=data.fd,
+        sub_circuit_name=data.sub_circuit_name,
+        sub_circuit_description=data.sub_circuit_description,
+        sub_circuit_itm=data.sub_circuit_itm,
+        sub_circuit_mm2=data.sub_circuit_mm2,
         justification=data.justification,
         status="pending",
     )
@@ -116,18 +148,37 @@ def approve_request(
     if not bar:
         raise HTTPException(status_code=404, detail="Barra no encontrada para la estacion")
 
-    # Create the circuit automatically
-    circuit = Circuit(
-        bar_id=bar.id,
-        denomination=f"AMP-{req.id}",
-        name=f"Ampliacion Solicitud #{req.id}",
-        description=req.justification,
-        pi_kw=req.requested_load_kw,
-        fd=1.0,
-        md_kw=req.requested_load_kw,
-        status="operative_normal",
-    )
-    db.add(circuit)
+    md_kw = req.requested_load_kw * req.fd
+
+    if req.circuit_id:
+        # Create sub-circuit on existing circuit
+        sub = SubCircuit(
+            circuit_id=req.circuit_id,
+            name=req.sub_circuit_name or f"Ampliacion Solicitud #{req.id}",
+            description=req.sub_circuit_description or req.justification,
+            itm=req.sub_circuit_itm,
+            mm2=req.sub_circuit_mm2,
+            pi_kw=req.requested_load_kw,
+            fd=req.fd,
+            md_kw=md_kw,
+        )
+        db.add(sub)
+        created_entity = {"sub_circuit_created": True}
+    else:
+        # Create new circuit on bar
+        circuit = Circuit(
+            bar_id=bar.id,
+            denomination=f"AMP-{req.id}",
+            name=f"Ampliacion Solicitud #{req.id}",
+            description=req.justification,
+            local_item=req.local_item,
+            pi_kw=req.requested_load_kw,
+            fd=req.fd,
+            md_kw=md_kw,
+            status="operative_normal",
+        )
+        db.add(circuit)
+        created_entity = {"circuit_created": True}
 
     req.status = "approved"
     req.reviewed_by = admin.id
@@ -146,7 +197,7 @@ def approve_request(
         action="APPROVE_REQUEST",
         entity_type="request",
         entity_id=req.id,
-        details={"circuit_created": circuit.id, "station_id": req.station_id},
+        details={**created_entity, "station_id": req.station_id},
     )
 
     return _enrich_request(req, db)

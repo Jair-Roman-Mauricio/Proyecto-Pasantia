@@ -24,16 +24,18 @@ const adminOptions = [
   { id: 'audit', label: 'Auditoria', icon: ClipboardList },
 ];
 
-const opersacOptions = [
-  { id: 'map', label: 'Mapa de Linea 1', icon: Map },
-  { id: 'requests', label: 'Mis Solicitudes', icon: FileText },
+const allOpersacOptions = [
+  { id: 'map', label: 'Mapa de Linea 1', icon: Map, permission: 'view_stations' },
+  { id: 'requests', label: 'Mis Solicitudes', icon: FileText, permission: 'send_requests' },
+  { id: 'reports', label: 'Reportes', icon: BarChart3, permission: 'view_reports' },
 ];
 
 export default function Sidebar() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { activeOption, setActiveOption, viewMode, toggleViewMode } = useSidebar();
   const navigate = useNavigate();
 
+  const opersacOptions = allOpersacOptions.filter((opt) => hasPermission(opt.permission));
   const options = viewMode === 'admin' && user?.role === 'admin' ? adminOptions : opersacOptions;
 
   return (

@@ -2,13 +2,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import require_admin
+from app.dependencies import get_current_user, require_admin
 from app.models.user import User
 from app.models.permission import Permission
 from app.schemas.permission import PermissionResponse, PermissionsBulkUpdate
 from app.utils.constants import PERMISSION_FEATURES
 
 router = APIRouter(prefix="/permissions", tags=["Permissions"])
+
+
+@router.get("/me", response_model=list[PermissionResponse])
+def get_my_permissions(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return db.query(Permission).filter(Permission.user_id == user.id).all()
 
 
 @router.get("/features")

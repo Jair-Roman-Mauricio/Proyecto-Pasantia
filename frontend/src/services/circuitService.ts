@@ -45,6 +45,11 @@ export const circuitService = {
     await api.delete(`/sub-circuits/${id}`);
   },
 
+  async updateSubCircuitStatus(id: number, status: string): Promise<SubCircuit> {
+    const { data } = await api.put<SubCircuit>(`/sub-circuits/${id}/status`, { status });
+    return data;
+  },
+
   async getBarPowerSummary(barId: number): Promise<BarPowerSummary> {
     const { data } = await api.get<BarPowerSummary>(`/bars/${barId}/power-summary`);
     return data;

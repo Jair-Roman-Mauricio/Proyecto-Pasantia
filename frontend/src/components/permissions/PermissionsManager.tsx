@@ -12,10 +12,19 @@ const FEATURE_LABELS: Record<string, string> = {
   view_reports: 'Ver reportes',
 };
 
+const ALL_FEATURES = Object.keys(FEATURE_LABELS);
+
+interface PermissionState {
+  feature_key: string;
+  is_allowed: boolean;
+}
+
 export default function PermissionsManager() {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [permissions, setPermissions] = useState<PermissionState[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
   useEffect(() => {
     api.get('/users').then((res) => {
@@ -25,7 +34,15 @@ export default function PermissionsManager() {
 
   useEffect(() => {
     if (selectedUserId) {
-      api.get(`/permissions/users/${selectedUserId}`).then((res) => setPermissions(res.data));
+      api.get<Permission[]>(`/permissions/users/${selectedUserId}`).then((res) => {
+        const existing = res.data;
+        const merged = ALL_FEATURES.map((key) => {
+          const found = existing.find((p) => p.feature_key === key);
+          return { feature_key: key, is_allowed: found ? found.is_allowed : false };
+        });
+        setPermissions(merged);
+        setSaveMessage('');
+      });
     }
   }, [selectedUserId]);
 
@@ -37,9 +54,18 @@ export default function PermissionsManager() {
 
   const handleSave = async () => {
     if (!selectedUserId) return;
-    await api.put(`/permissions/users/${selectedUserId}`, {
-      permissions: permissions.map((p) => ({ feature_key: p.feature_key, is_allowed: p.is_allowed })),
-    });
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      await api.put(`/permissions/users/${selectedUserId}`, {
+        permissions: permissions.map((p) => ({ feature_key: p.feature_key, is_allowed: p.is_allowed })),
+      });
+      setSaveMessage('Permisos guardados exitosamente');
+    } catch {
+      setSaveMessage('Error al guardar permisos');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -62,8 +88,15 @@ export default function PermissionsManager() {
               </label>
             ))}
           </div>
-          <div className="mt-4">
-            <Button onClick={handleSave}>Guardar Permisos</Button>
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? 'Guardando...' : 'Guardar Permisos'}
+            </Button>
+            {saveMessage && (
+              <span className={`text-sm ${saveMessage.includes('Error') ? 'text-red-500' : 'text-green-500'}`}>
+                {saveMessage}
+              </span>
+            )}
           </div>
         </Card>
       )}

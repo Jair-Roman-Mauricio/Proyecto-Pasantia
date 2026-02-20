@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import check_permission
 from app.models.user import User
 from app.models.bar import Bar
 from app.schemas.bar import BarResponse
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/bars", tags=["Bars"])
 def get_bars_by_station(
     station_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(check_permission("view_stations")),
 ):
     bars = (
         db.query(Bar)
@@ -30,7 +30,7 @@ def get_bars_by_station(
 def get_bar(
     bar_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(check_permission("view_stations")),
 ):
     bar = db.query(Bar).filter(Bar.id == bar_id).first()
     if not bar:
@@ -42,7 +42,7 @@ def get_bar(
 def get_bar_power_summary(
     bar_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(check_permission("view_stations")),
 ):
     calculator = EnergyCalculator(db)
     summary = calculator.get_bar_power_summary(bar_id)

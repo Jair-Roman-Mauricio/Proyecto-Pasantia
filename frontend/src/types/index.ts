@@ -13,6 +13,7 @@ export interface UserBrief {
   username: string;
   full_name: string;
   role: string;
+  permissions?: Record<string, boolean>;
 }
 
 export interface LoginResponse {
@@ -85,6 +86,8 @@ export interface SubCircuit {
   pi_kw: number;
   fd: number;
   md_kw: number;
+  status: string;
+  reserve_since: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -96,7 +99,15 @@ export interface LoadRequest {
   station_id: number;
   station_name: string | null;
   bar_type: string;
+  circuit_id: number | null;
+  circuit_name: string | null;
+  local_item: string | null;
   requested_load_kw: number;
+  fd: number;
+  sub_circuit_name: string | null;
+  sub_circuit_description: string | null;
+  sub_circuit_itm: string | null;
+  sub_circuit_mm2: string | null;
   justification: string | null;
   status: 'pending' | 'approved' | 'rejected';
   rejection_reason: string | null;

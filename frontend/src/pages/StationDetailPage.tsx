@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { stationService } from '../services/stationService';
@@ -17,6 +17,12 @@ export default function StationDetailPage() {
   const [station, setStation] = useState<Station | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('unifilar');
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshStation = useCallback(() => {
+    if (stationId) {
+      stationService.getById(Number(stationId)).then(setStation);
+    }
+  }, [stationId]);
 
   useEffect(() => {
     if (stationId) {
@@ -84,7 +90,7 @@ export default function StationDetailPage() {
       {/* Tab content */}
       {activeTab === 'summary' && <SummaryTab station={station} />}
       {activeTab === 'unifilar' && <UnifilarTab station={station} />}
-      {activeTab === 'bars' && <BarsCircuitsTab station={station} />}
+      {activeTab === 'bars' && <BarsCircuitsTab station={station} onStationChanged={refreshStation} />}
     </div>
   );
 }

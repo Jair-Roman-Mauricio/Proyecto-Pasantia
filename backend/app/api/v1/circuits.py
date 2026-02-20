@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_admin
+from app.dependencies import get_current_user, require_admin, check_permission
 from app.models.user import User
 from app.models.bar import Bar
 from app.models.circuit import Circuit
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/circuits", tags=["Circuits"])
 def get_circuits_by_bar(
     bar_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(check_permission("view_circuits")),
 ):
     circuits = (
         db.query(Circuit)
@@ -35,7 +35,7 @@ def get_circuits_by_bar(
 def get_circuit(
     circuit_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(check_permission("view_circuits")),
 ):
     circuit = db.query(Circuit).filter(Circuit.id == circuit_id).first()
     if not circuit:

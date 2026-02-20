@@ -14,8 +14,9 @@ interface ObservationsModalProps {
 }
 
 export default function ObservationsModal({ barId, circuitId, onClose }: ObservationsModalProps) {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const canAddObservations = hasPermission('add_observations');
   const [observations, setObservations] = useState<Observation[]>([]);
   const [content, setContent] = useState('');
   const [severity, setSeverity] = useState('recommendation');
@@ -85,28 +86,30 @@ export default function ObservationsModal({ barId, circuitId, onClose }: Observa
         ))}
       </div>
 
-      <div className="border-t border-[var(--border-color)] pt-4 space-y-3">
-        <div className="flex gap-2">
-          <select
-            value={severity}
-            onChange={(e) => setSeverity(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm"
-          >
-            <option value="recommendation">Recomendacion</option>
-            <option value="warning">Advertencia</option>
-            <option value="urgent">Urgente</option>
-          </select>
-          <input
-            type="text"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Escribir observacion..."
-            className="flex-1 px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm"
-            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          />
-          <Button size="sm" onClick={handleSubmit} disabled={!content}>Enviar</Button>
+      {canAddObservations && (
+        <div className="border-t border-[var(--border-color)] pt-4 space-y-3">
+          <div className="flex gap-2">
+            <select
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value)}
+              className="px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm"
+            >
+              <option value="recommendation">Recomendacion</option>
+              <option value="warning">Advertencia</option>
+              <option value="urgent">Urgente</option>
+            </select>
+            <input
+              type="text"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Escribir observacion..."
+              className="flex-1 px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm"
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            />
+            <Button size="sm" onClick={handleSubmit} disabled={!content}>Enviar</Button>
+          </div>
         </div>
-      </div>
+      )}
     </Modal>
   );
 }

@@ -20,10 +20,11 @@ import StatusChangeModal from './StatusChangeModal';
 
 interface BarsCircuitsTabProps {
   station: Station;
+  onStationChanged?: () => void;
 }
 
-export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
-  const { user } = useAuth();
+export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircuitsTabProps) {
+  const { user, hasPermission } = useAuth();
   const { viewMode } = useSidebar();
   const [bars, setBars] = useState<Bar[]>([]);
   const [expandedBars, setExpandedBars] = useState<Set<number>>(new Set());
@@ -41,6 +42,7 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   const isAdmin = user?.role === 'admin' && viewMode === 'admin';
+  const canViewCircuits = hasPermission('view_circuits');
 
   useEffect(() => {
     stationService.getBars(station.id).then((data) => {
@@ -54,12 +56,14 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
 
   useEffect(() => {
     if (selectedBar) {
-      circuitService.getByBar(selectedBar.id).then((circuits) => {
-        setBarCircuits((prev) => ({ ...prev, [selectedBar.id]: circuits }));
-      });
+      if (canViewCircuits) {
+        circuitService.getByBar(selectedBar.id).then((circuits) => {
+          setBarCircuits((prev) => ({ ...prev, [selectedBar.id]: circuits }));
+        });
+      }
       circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
     }
-  }, [selectedBar]);
+  }, [selectedBar, canViewCircuits]);
 
   useEffect(() => {
     if (selectedCircuit) {
@@ -69,10 +73,15 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
     }
   }, [selectedCircuit]);
 
-  const loadSubCircuits = () => {
+  const refreshAfterSubCircuitChange = () => {
     if (selectedCircuit) {
       circuitService.getSubCircuits(selectedCircuit.id).then(setSubCircuits);
     }
+    if (selectedBar) {
+      circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
+      loadBarCircuits(selectedBar.id);
+    }
+    onStationChanged?.();
   };
 
   const toggleBar = (barId: number) => {
@@ -99,6 +108,7 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
     setShowCircuitForm(false);
     if (formBarId) loadBarCircuits(formBarId);
     if (selectedBar) circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
+    onStationChanged?.();
   };
 
   const handleCircuitDeleted = () => {
@@ -106,6 +116,7 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
       loadBarCircuits(selectedBar.id);
       circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
     }
+    onStationChanged?.();
   };
 
   if (isLoading) return <div className="flex justify-center py-12"><Spinner size="lg" /></div>;
@@ -129,13 +140,13 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
                     {expandedBars.has(bar.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     <span className="truncate">{bar.name}</span>
                   </button>
-                  {isAdmin && (
+                  {isAdmin && canViewCircuits && (
                     <button onClick={() => { setFormBarId(bar.id); setShowCircuitForm(true); }} className="p-1 rounded hover:bg-[var(--hover-bg)] text-[var(--text-muted)] cursor-pointer" title="Agregar circuito">
                       <Plus size={14} />
                     </button>
                   )}
                 </div>
-                {expandedBars.has(bar.id) && barCircuits[bar.id] && (
+                {canViewCircuits && expandedBars.has(bar.id) && barCircuits[bar.id] && (
                   <div className="ml-6 mt-1 space-y-0.5">
                     {barCircuits[bar.id].map((circuit) => (
                       <button
@@ -183,7 +194,7 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
-                {isAdmin && selectedCircuit && (
+                {isAdmin && canViewCircuits && selectedCircuit && (
                   <Button variant="secondary" size="sm" onClick={() => setShowSubCircuitForm(true)}>
                     <Plus size={14} className="mr-1" /> Agregar Sub-circuito
                   </Button>
@@ -203,22 +214,24 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
 
             {powerSummary && <PowerCards summary={powerSummary} />}
 
-            {selectedCircuit ? (
-              <SubCircuitTable
-                subCircuits={subCircuits}
-                isEditMode={isEditMode}
-                onDelete={loadSubCircuits}
-              />
-            ) : (
-              <CircuitTable
-                circuits={barCircuits[selectedBar.id] || []}
-                isEditMode={isEditMode}
-                onDelete={handleCircuitDeleted}
-                onView={(circuit) => setSelectedCircuit(circuit)}
-                onNavigateToBar={(bar) => { handleBarSelect(bar); if (!expandedBars.has(bar.id)) toggleBar(bar.id); }}
-                bars={bars}
-                barName={selectedBar.name}
-              />
+            {canViewCircuits && (
+              selectedCircuit ? (
+                <SubCircuitTable
+                  subCircuits={subCircuits}
+                  isEditMode={isEditMode}
+                  onDelete={refreshAfterSubCircuitChange}
+                />
+              ) : (
+                <CircuitTable
+                  circuits={barCircuits[selectedBar.id] || []}
+                  isEditMode={isEditMode}
+                  onDelete={handleCircuitDeleted}
+                  onView={(circuit) => setSelectedCircuit(circuit)}
+                  onNavigateToBar={(bar) => { handleBarSelect(bar); if (!expandedBars.has(bar.id)) toggleBar(bar.id); }}
+                  bars={bars}
+                  barName={selectedBar.name}
+                />
+              )
             )}
           </div>
         ) : (
@@ -233,13 +246,29 @@ export default function BarsCircuitsTab({ station }: BarsCircuitsTabProps) {
         <CircuitForm barId={formBarId} bars={bars} onClose={() => setShowCircuitForm(false)} onCreated={handleCircuitCreated} />
       )}
       {showSubCircuitForm && selectedCircuit && (
-        <SubCircuitForm circuitId={selectedCircuit.id} onClose={() => setShowSubCircuitForm(false)} onCreated={() => { setShowSubCircuitForm(false); loadSubCircuits(); }} />
+        <SubCircuitForm circuitId={selectedCircuit.id} onClose={() => setShowSubCircuitForm(false)} onCreated={() => { setShowSubCircuitForm(false); refreshAfterSubCircuitChange(); }} />
       )}
       {showObservations && (selectedBar || selectedCircuit) && (
         <ObservationsModal barId={selectedBar?.id} circuitId={selectedCircuit?.id} onClose={() => setShowObservations(false)} />
       )}
       {showStatusChange && selectedBar && (
-        <StatusChangeModal barId={selectedBar.id} circuits={barCircuits[selectedBar.id] || []} onClose={() => setShowStatusChange(false)} onSaved={() => { setShowStatusChange(false); if (selectedBar) loadBarCircuits(selectedBar.id); }} />
+        selectedCircuit ? (
+          <StatusChangeModal
+            mode="sub-circuits"
+            circuitId={selectedCircuit.id}
+            subCircuits={subCircuits}
+            onClose={() => setShowStatusChange(false)}
+            onSaved={() => { setShowStatusChange(false); refreshAfterSubCircuitChange(); }}
+          />
+        ) : (
+          <StatusChangeModal
+            mode="circuits"
+            barId={selectedBar.id}
+            circuits={barCircuits[selectedBar.id] || []}
+            onClose={() => setShowStatusChange(false)}
+            onSaved={() => { setShowStatusChange(false); if (selectedBar) loadBarCircuits(selectedBar.id); onStationChanged?.(); }}
+          />
+        )
       )}
     </div>
   );

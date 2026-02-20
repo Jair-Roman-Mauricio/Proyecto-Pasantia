@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -35,8 +35,14 @@ class SubCircuitResponse(BaseModel):
     pi_kw: Decimal
     fd: Decimal
     md_kw: Decimal
+    status: str
+    reserve_since: Optional[date] = None
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class SubCircuitStatusUpdate(BaseModel):
+    status: str

@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import String, Integer, Numeric, DateTime, ForeignKey, Text
+from sqlalchemy import String, Integer, Numeric, DateTime, Date, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -22,6 +22,10 @@ class SubCircuit(Base):
     pi_kw: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     fd: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=1.0)
     md_kw: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=0)
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="operative_normal", index=True
+    )
+    reserve_since: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

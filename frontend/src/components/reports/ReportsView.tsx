@@ -1,26 +1,47 @@
 import { useState, useEffect } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Filter } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../../config/api';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
+import Input from '../ui/Input';
 
 export default function ReportsView() {
   const [demandData, setDemandData] = useState<any[]>([]);
   const [requestsData, setRequestsData] = useState<any[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const loadData = (start?: string, end?: string) => {
+    const params: Record<string, string> = {};
+    if (start) params.start_date = start;
+    if (end) params.end_date = end;
+    api.get('/reports/demand-evolution', { params }).then((res) => setDemandData(res.data));
+    api.get('/reports/requests-per-station', { params }).then((res) => setRequestsData(res.data));
+  };
 
   useEffect(() => {
-    api.get('/reports/demand-evolution').then((res) => setDemandData(res.data));
-    api.get('/reports/requests-per-station').then((res) => setRequestsData(res.data));
+    loadData();
   }, []);
 
+  const handleFilter = () => {
+    loadData(startDate || undefined, endDate || undefined);
+  };
+
   const handleExport = async () => {
-    const response = await api.get('/reports/export/excel', { responseType: 'blob' });
+    const params: Record<string, string> = {};
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+
+    const response = await api.get('/reports/export/excel', { params, responseType: 'blob' });
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'reportes.xlsx';
+    link.download = startDate || endDate
+      ? `reportes_${startDate || 'inicio'}_${endDate || 'fin'}.xlsx`
+      : 'reportes.xlsx';
     link.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -32,7 +53,36 @@ export default function ReportsView() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
+      <Card>
+        <div className="flex items-end gap-4 flex-wrap">
+          <div className="w-48">
+            <Input
+              label="Desde"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+          <div className="w-48">
+            <Input
+              label="Hasta"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+          <Button size="sm" onClick={handleFilter}>
+            <Filter size={16} className="mr-1" /> Filtrar
+          </Button>
+          {(startDate || endDate) && (
+            <Button variant="ghost" size="sm" onClick={() => { setStartDate(''); setEndDate(''); loadData(); }}>
+              Limpiar
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-6 mt-6">
         <Card>
           <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Evolucion de Demanda Electrica (kW)</h3>
           <div className="h-80">

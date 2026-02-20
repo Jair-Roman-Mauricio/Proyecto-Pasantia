@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_admin
+from app.dependencies import get_current_user, require_admin, check_permission
 from app.models.user import User
 from app.models.station import Station
 from app.schemas.station import StationResponse, StationUpdate, PowerSummary
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/stations", tags=["Stations"])
 
 
 @router.get("", response_model=list[StationResponse])
-def get_stations(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_stations(db: Session = Depends(get_db), _: User = Depends(check_permission("view_stations"))):
     stations = db.query(Station).order_by(Station.order_index).all()
     return stations
 
@@ -21,7 +21,7 @@ def get_stations(db: Session = Depends(get_db), _: User = Depends(get_current_us
 def get_station(
     station_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(check_permission("view_stations")),
 ):
     station = db.query(Station).filter(Station.id == station_id).first()
     if not station:
@@ -33,7 +33,7 @@ def get_station(
 def get_power_summary(
     station_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(check_permission("view_stations")),
 ):
     station = db.query(Station).filter(Station.id == station_id).first()
     if not station:

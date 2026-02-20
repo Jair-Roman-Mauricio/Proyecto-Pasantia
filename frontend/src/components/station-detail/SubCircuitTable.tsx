@@ -1,5 +1,6 @@
 import { Trash2 } from 'lucide-react';
 import type { SubCircuit } from '../../types';
+import { CIRCUIT_STATUS_COLORS, CIRCUIT_STATUS_LABELS } from '../../config/constants';
 import { circuitService } from '../../services/circuitService';
 import Table from '../ui/Table';
 import Button from '../ui/Button';
@@ -18,6 +19,19 @@ export default function SubCircuitTable({ subCircuits, isEditMode, onDelete }: S
   };
 
   const columns = [
+    {
+      key: 'status',
+      header: 'Estado',
+      render: (s: SubCircuit) => (
+        <span className="flex items-center gap-1.5">
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: CIRCUIT_STATUS_COLORS[s.status] || '#6b7280' }}
+          />
+          <span className="text-xs">{CIRCUIT_STATUS_LABELS[s.status] || s.status}</span>
+        </span>
+      ),
+    },
     {
       key: 'name',
       header: 'Circuito',

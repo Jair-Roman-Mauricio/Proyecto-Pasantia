@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Plus } from 'lucide-react';
 import api from '../../config/api';
 import type { LoadRequest } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -6,6 +7,7 @@ import Table from '../ui/Table';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import RequestForm from './RequestForm';
 
 export default function RequestTable() {
   const { user } = useAuth();
@@ -13,6 +15,7 @@ export default function RequestTable() {
   const [selectedRequest, setSelectedRequest] = useState<LoadRequest | null>(null);
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [showNewRequest, setShowNewRequest] = useState(false);
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => { loadRequests(); }, []);
@@ -54,9 +57,16 @@ export default function RequestTable() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-[var(--text-primary)] mb-4">
-        {isAdmin ? 'Solicitudes de Ampliacion' : 'Mis Solicitudes'}
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-[var(--text-primary)]">
+          {isAdmin ? 'Solicitudes de Ampliacion' : 'Mis Solicitudes'}
+        </h2>
+        {!isAdmin && (
+          <Button onClick={() => setShowNewRequest(true)}>
+            <Plus size={16} className="mr-1" /> Nueva Solicitud
+          </Button>
+        )}
+      </div>
       <Table columns={columns} data={requests} rowKey={(r) => r.id} />
 
       {selectedRequest && (
@@ -65,7 +75,28 @@ export default function RequestTable() {
             <p className="text-sm"><strong>Opersac:</strong> {selectedRequest.opersac_name}</p>
             <p className="text-sm"><strong>Estacion:</strong> {selectedRequest.station_name}</p>
             <p className="text-sm"><strong>Barra:</strong> {selectedRequest.bar_type}</p>
-            <p className="text-sm"><strong>Carga solicitada:</strong> {selectedRequest.requested_load_kw} kW</p>
+            {selectedRequest.circuit_name && (
+              <p className="text-sm"><strong>Circuito:</strong> {selectedRequest.circuit_name}</p>
+            )}
+            {selectedRequest.sub_circuit_name && (
+              <div className="p-3 rounded-lg bg-[var(--bg-secondary)] space-y-1">
+                <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Datos del Sub-circuito</p>
+                <p className="text-sm"><strong>Denominacion:</strong> {selectedRequest.sub_circuit_name}</p>
+                {selectedRequest.sub_circuit_description && (
+                  <p className="text-sm"><strong>Descripcion:</strong> {selectedRequest.sub_circuit_description}</p>
+                )}
+                {selectedRequest.sub_circuit_itm && (
+                  <p className="text-sm"><strong>ITM:</strong> {selectedRequest.sub_circuit_itm}</p>
+                )}
+                {selectedRequest.sub_circuit_mm2 && (
+                  <p className="text-sm"><strong>MM2:</strong> {selectedRequest.sub_circuit_mm2}</p>
+                )}
+              </div>
+            )}
+            <p className="text-sm"><strong>Local/ITEM:</strong> {selectedRequest.local_item || 'N/A'}</p>
+            <p className="text-sm"><strong>PI (kW):</strong> {selectedRequest.requested_load_kw} kW</p>
+            <p className="text-sm"><strong>F.D:</strong> {selectedRequest.fd}</p>
+            <p className="text-sm"><strong>MD (kW):</strong> {(selectedRequest.requested_load_kw * selectedRequest.fd).toFixed(2)} kW</p>
             <p className="text-sm"><strong>Justificacion:</strong> {selectedRequest.justification || 'N/A'}</p>
             <p className="text-sm"><strong>Estado:</strong> <Badge color={statusColor(selectedRequest.status)}>{statusLabel(selectedRequest.status)}</Badge></p>
             {isAdmin && selectedRequest.status === 'pending' && (
@@ -93,6 +124,10 @@ export default function RequestTable() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {showNewRequest && (
+        <RequestForm onClose={() => setShowNewRequest(false)} onCreated={() => { setShowNewRequest(false); loadRequests(); }} />
       )}
     </div>
   );

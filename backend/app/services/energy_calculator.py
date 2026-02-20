@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models.station import Station
 from app.models.bar import Bar
 from app.models.circuit import Circuit
+from app.models.sub_circuit import SubCircuit
 
 
 class EnergyCalculator:
@@ -26,6 +27,17 @@ class EnergyCalculator:
                 .all()
             )
             total_md = sum((c.md_kw for c in circuits), Decimal("0"))
+
+            # Also sum sub-circuits
+            circuit_ids = [c.id for c in circuits]
+            if circuit_ids:
+                sub_circuits = (
+                    self.db.query(SubCircuit)
+                    .filter(SubCircuit.circuit_id.in_(circuit_ids))
+                    .filter(SubCircuit.status == "operative_normal")
+                    .all()
+                )
+                total_md += sum((s.md_kw for s in sub_circuits), Decimal("0"))
 
         station.max_demand_kw = total_md
         station.available_power_kw = station.transformer_capacity_kw - total_md
@@ -81,6 +93,18 @@ class EnergyCalculator:
 
         total_pi = sum((c.pi_kw for c in circuits), Decimal("0"))
         total_md = sum((c.md_kw for c in circuits), Decimal("0"))
+
+        # Also sum sub-circuits
+        circuit_ids = [c.id for c in circuits]
+        if circuit_ids:
+            sub_circuits = (
+                self.db.query(SubCircuit)
+                .filter(SubCircuit.circuit_id.in_(circuit_ids))
+                .filter(SubCircuit.status == "operative_normal")
+                .all()
+            )
+            total_pi += sum((s.pi_kw for s in sub_circuits), Decimal("0"))
+            total_md += sum((s.md_kw for s in sub_circuits), Decimal("0"))
 
         return {
             "total_installed_power_kw": float(total_pi),
