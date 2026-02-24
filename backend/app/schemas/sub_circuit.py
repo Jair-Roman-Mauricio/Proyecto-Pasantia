@@ -13,6 +13,8 @@ class SubCircuitCreate(BaseModel):
     pi_kw: Decimal
     fd: Decimal = Decimal("1.0")
     md_kw: Optional[Decimal] = None
+    status: str = "operative_normal"
+    reserve_expires_at: Optional[date] = None
 
 
 class SubCircuitUpdate(BaseModel):
@@ -37,6 +39,7 @@ class SubCircuitResponse(BaseModel):
     md_kw: Decimal
     status: str
     reserve_since: Optional[date] = None
+    reserve_expires_at: Optional[date] = None
     created_at: datetime
     updated_at: datetime
 
@@ -46,3 +49,4 @@ class SubCircuitResponse(BaseModel):
 
 class SubCircuitStatusUpdate(BaseModel):
     status: str
+    reserve_expires_at: Optional[date] = None

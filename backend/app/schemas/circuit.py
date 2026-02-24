@@ -14,6 +14,7 @@ class CircuitCreate(BaseModel):
     fd: Decimal = Decimal("1.0")
     md_kw: Optional[Decimal] = None  # auto-calculated if not provided
     status: str = "operative_normal"
+    reserve_expires_at: Optional[date] = None
     is_ups: bool = False
     secondary_bar_id: Optional[int] = None
     tertiary_bar_id: Optional[int] = None
@@ -32,6 +33,7 @@ class CircuitUpdate(BaseModel):
 
 class CircuitStatusUpdate(BaseModel):
     status: str  # operative_normal, reserve_r, reserve_equipped_re
+    reserve_expires_at: Optional[date] = None
 
 
 class CircuitResponse(BaseModel):
@@ -49,6 +51,7 @@ class CircuitResponse(BaseModel):
     status: str
     is_ups: bool
     reserve_since: Optional[date] = None
+    reserve_expires_at: Optional[date] = None
     client_last_contact: Optional[date] = None
     created_at: datetime
     updated_at: datetime

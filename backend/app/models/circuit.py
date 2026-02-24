@@ -33,6 +33,7 @@ class Circuit(Base):
     )
     is_ups: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reserve_since: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    reserve_expires_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     client_last_contact: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -45,7 +46,7 @@ class Circuit(Base):
 
     bar = relationship("Bar", back_populates="circuits", foreign_keys=[bar_id])
     secondary_bar = relationship("Bar", back_populates="secondary_circuits", foreign_keys=[secondary_bar_id])
-    tertiary_bar = relationship("Bar", foreign_keys=[tertiary_bar_id])
+    tertiary_bar = relationship("Bar", back_populates="tertiary_circuits", foreign_keys=[tertiary_bar_id])
     sub_circuits = relationship("SubCircuit", back_populates="circuit", cascade="all, delete-orphan")
     observations = relationship("Observation", back_populates="circuit")
     notifications = relationship("Notification", back_populates="circuit")

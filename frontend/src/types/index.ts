@@ -71,6 +71,7 @@ export interface Circuit {
   status: 'operative_normal' | 'reserve_r' | 'reserve_equipped_re' | 'inactive';
   is_ups: boolean;
   reserve_since: string | null;
+  reserve_expires_at: string | null;
   client_last_contact: string | null;
   created_at: string;
   updated_at: string;
@@ -88,6 +89,7 @@ export interface SubCircuit {
   md_kw: number;
   status: string;
   reserve_since: string | null;
+  reserve_expires_at: string | null;
   created_at: string;
   updated_at: string;
 }

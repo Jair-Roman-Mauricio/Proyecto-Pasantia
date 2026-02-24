@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import require_admin
 from app.models.user import User
+from app.models.circuit import Circuit
 from app.models.notification import Notification
 from app.schemas.notification import NotificationResponse, NotificationExtend
 
@@ -80,3 +81,25 @@ def dismiss_notification(
     notif.is_dismissed = True
     db.commit()
     return {"message": "Notificacion descartada"}
+
+
+@router.put("/{notification_id}/resolve-reserve")
+def resolve_reserve(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    notif = db.query(Notification).filter(Notification.id == notification_id).first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notificacion no encontrada")
+    if notif.type != "reserve_no_contact":
+        raise HTTPException(status_code=400, detail="Solo aplica a notificaciones de reserva")
+    if notif.circuit_id:
+        circuit = db.query(Circuit).filter(Circuit.id == notif.circuit_id).first()
+        if circuit:
+            circuit.status = "inactive"
+            circuit.reserve_since = None
+            circuit.reserve_expires_at = None
+    notif.is_dismissed = True
+    db.commit()
+    return {"message": "Reserva eliminada"}

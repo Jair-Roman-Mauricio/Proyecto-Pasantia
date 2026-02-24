@@ -1,9 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.config import settings
 from app.api.v1.router import api_router
-from app.database import engine, Base
+from app.database import engine, Base, SessionLocal
 from app.models import *  # noqa: F401 - Import all models for table creation
 
 app = FastAPI(
@@ -30,6 +31,23 @@ def on_startup():
     # Create tables if they don't exist (for development)
     Base.metadata.create_all(bind=engine)
     _seed_initial_data()
+
+    from app.services.notification_service import check_expiring_reserves
+
+    def run_reserve_check():
+        db = SessionLocal()
+        try:
+            check_expiring_reserves(db)
+        finally:
+            db.close()
+
+    # Ejecutar verificación inmediata al iniciar
+    run_reserve_check()
+
+    # Programar verificación diaria a las 08:00
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_reserve_check, "cron", hour=8, minute=0)
+    scheduler.start()
 
 
 def _seed_initial_data():

@@ -91,8 +91,8 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, onView, o
         data={circuits}
         rowKey={(c) => c.id}
         rowClassName={(c) => {
-          if (c.status === 'reserve_r') return 'bg-yellow-50 dark:bg-yellow-900/10';
-          if (c.status === 'reserve_equipped_re') return 'bg-blue-50 dark:bg-blue-900/10';
+          if (c.status === 'reserve_r') return 'bg-yellow-500/10';
+          if (c.status === 'reserve_equipped_re') return 'bg-blue-500/10';
           return '';
         }}
       />

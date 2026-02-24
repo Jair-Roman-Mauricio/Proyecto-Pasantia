@@ -107,6 +107,7 @@ def create_circuit(
 
     if data.status in ("reserve_r", "reserve_equipped_re"):
         circuit.reserve_since = date.today()
+        circuit.reserve_expires_at = data.reserve_expires_at
 
     db.add(circuit)
     db.commit()
@@ -197,8 +198,10 @@ def update_circuit_status(
 
     if data.status in ("reserve_r", "reserve_equipped_re") and old_status == "operative_normal":
         circuit.reserve_since = date.today()
+        circuit.reserve_expires_at = data.reserve_expires_at
     elif data.status == "operative_normal":
         circuit.reserve_since = None
+        circuit.reserve_expires_at = None
 
     db.commit()
     db.refresh(circuit)

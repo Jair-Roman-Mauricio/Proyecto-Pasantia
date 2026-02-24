@@ -38,8 +38,10 @@ Formula: Barra Normal = `(station_id * 3) - 2`, Emergencia = `(station_id * 3) -
 ## Valores de referencia
 
 **status de circuito:** `operative_normal`, `reserve_r`, `reserve_equipped_re`
+**status de sub-circuito:** `operative_normal`, `reserve_r`, `reserve_equipped_re`
 **bar_type:** `normal`, `emergency`, `continuity`
 **MD se calcula como:** `pi_kw * fd`
+**reserve_expires_at:** fecha hasta la cual es válida la reserva (DATE). El sistema genera una notificación automática cuando esta fecha es alcanzada.
 
 ---
 
@@ -122,7 +124,9 @@ VALUES (
 
 ```sql
 -- Circuito en reserva (R) o reserva equipada (R/E)
-INSERT INTO circuits (bar_id, denomination, name, description, local_item, pi_kw, fd, md_kw, status, is_ups, reserve_since, created_at, updated_at)
+-- reserve_since: fecha de inicio (hoy)
+-- reserve_expires_at: fecha hasta la cual es válida la reserva (el sistema notificará al llegar)
+INSERT INTO circuits (bar_id, denomination, name, description, local_item, pi_kw, fd, md_kw, status, is_ups, reserve_since, reserve_expires_at, created_at, updated_at)
 VALUES (
     ___,              -- bar_id
     '___',            -- denomination
@@ -134,27 +138,53 @@ VALUES (
     ___,              -- md_kw
     'reserve_r',      -- o 'reserve_equipped_re'
     false,
-    CURRENT_DATE,     -- reserve_since
+    CURRENT_DATE,     -- reserve_since (inicio de la reserva)
+    '____-__-__',     -- reserve_expires_at (ej: '2026-04-15', fecha de vencimiento)
     NOW(), NOW()
 );
 ```
 
 ---
 
-## 6. Insertar sub-circuito
+## 6. Insertar sub-circuito operativo
 
 ```sql
 -- Circuito padre: _____ (circuit_id: ___)
-INSERT INTO sub_circuits (circuit_id, name, description, itm, mm2, pi_kw, fd, md_kw, created_at, updated_at)
+INSERT INTO sub_circuits (circuit_id, name, description, itm, mm2, pi_kw, fd, md_kw, status, created_at, updated_at)
+VALUES (
+    ___,               -- circuit_id
+    '___',             -- name (denominacion del sub-circuito)
+    '___',             -- description (NULL si no hay)
+    '___',             -- itm (ej: '3x20A', NULL si no hay)
+    '___',             -- mm2 (ej: '3x4mm2', NULL si no hay)
+    ___,               -- pi_kw
+    ___,               -- fd
+    ___,               -- md_kw (= pi_kw * fd)
+    'operative_normal',-- status
+    NOW(), NOW()
+);
+```
+
+---
+
+## 6b. Insertar sub-circuito en reserva
+
+```sql
+-- Sub-circuito en reserva (R) o reserva equipada (R/E)
+-- reserve_expires_at: fecha de vencimiento que dispara la notificación automática
+INSERT INTO sub_circuits (circuit_id, name, description, itm, mm2, pi_kw, fd, md_kw, status, reserve_since, reserve_expires_at, created_at, updated_at)
 VALUES (
     ___,              -- circuit_id
-    '___',            -- name (denominacion del sub-circuito)
+    '___',            -- name
     '___',            -- description (NULL si no hay)
-    '___',            -- itm (ej: '3x20A', NULL si no hay)
-    '___',            -- mm2 (ej: '3x4mm2', NULL si no hay)
+    '___',            -- itm (NULL si no hay)
+    '___',            -- mm2 (NULL si no hay)
     ___,              -- pi_kw
     ___,              -- fd
-    ___,              -- md_kw (= pi_kw * fd)
+    ___,              -- md_kw
+    'reserve_r',      -- o 'reserve_equipped_re'
+    CURRENT_DATE,     -- reserve_since (inicio de la reserva)
+    '____-__-__',     -- reserve_expires_at (ej: '2026-04-15', fecha de vencimiento)
     NOW(), NOW()
 );
 ```
@@ -186,6 +216,39 @@ FROM totals t
 WHERE stations.id = ___;
 ```
 
+---
+
+## MIGRACION: Actualizar tablas existentes en BD
+
+> **Importante:** `create_all()` solo crea tablas nuevas. Si la BD ya existia antes de los cambios al modelo, ejecuta este SQL una sola vez en PostgreSQL (psql o pgAdmin).
+
+```sql
+-- =====================================================
+-- MIGRACION: Columnas nuevas en sub_circuits y circuits
+-- Ejecutar UNA SOLA VEZ si las tablas ya existian
+-- =====================================================
+
+-- Agregar columnas nuevas a sub_circuits
+ALTER TABLE sub_circuits
+    ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'operative_normal',
+    ADD COLUMN IF NOT EXISTS reserve_since DATE NULL,
+    ADD COLUMN IF NOT EXISTS reserve_expires_at DATE NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sub_circuits_status ON sub_circuits (status);
+
+-- Agregar columnas nuevas a circuits (si no existen)
+ALTER TABLE circuits
+    ADD COLUMN IF NOT EXISTS reserve_since DATE NULL,
+    ADD COLUMN IF NOT EXISTS reserve_expires_at DATE NULL,
+    ADD COLUMN IF NOT EXISTS client_last_contact DATE NULL;
+
+-- Verificar que las columnas se crearon:
+SELECT column_name, data_type, column_default
+FROM information_schema.columns
+WHERE table_name IN ('sub_circuits', 'circuits')
+  AND column_name IN ('status', 'reserve_since', 'reserve_expires_at', 'client_last_contact')
+ORDER BY table_name, column_name;
+```
 ---
 
 ## 8. Recalcular TODAS las estaciones de una vez
@@ -223,7 +286,7 @@ SELECT id, denomination, name, pi_kw, fd, md_kw, status, is_ups
 FROM circuits WHERE bar_id = ___ ORDER BY id;
 
 -- Ver sub-circuitos de un circuito
-SELECT id, name, itm, mm2, pi_kw, fd, md_kw
+SELECT id, name, itm, mm2, pi_kw, fd, md_kw, status, reserve_since, reserve_expires_at
 FROM sub_circuits WHERE circuit_id = ___ ORDER BY id;
 
 -- Resumen de potencia por estacion
@@ -237,6 +300,23 @@ FROM bars b
 LEFT JOIN circuits c ON c.bar_id = b.id
 WHERE b.station_id = ___
 GROUP BY b.id, b.name, b.bar_type ORDER BY b.id;
+
+-- Ver circuitos en reserva con su fecha de vencimiento
+SELECT c.id, c.denomination, c.name, c.status, c.reserve_since, c.reserve_expires_at,
+       b.name AS barra, s.name AS estacion
+FROM circuits c
+JOIN bars b ON c.bar_id = b.id
+JOIN stations s ON b.station_id = s.id
+WHERE c.status IN ('reserve_r', 'reserve_equipped_re')
+ORDER BY c.reserve_expires_at ASC NULLS LAST;
+
+-- Ver reservas que vencen hoy o ya vencieron (las que generan notificacion)
+SELECT c.id, c.denomination, c.name, c.reserve_expires_at, s.name AS estacion
+FROM circuits c
+JOIN bars b ON c.bar_id = b.id
+JOIN stations s ON b.station_id = s.id
+WHERE c.status IN ('reserve_r', 'reserve_equipped_re')
+  AND c.reserve_expires_at <= CURRENT_DATE;
 
 -- Limpiar todos los circuitos de una estacion (CUIDADO)
 -- DELETE FROM circuits WHERE bar_id IN (SELECT id FROM bars WHERE station_id = ___);
@@ -266,6 +346,7 @@ INSERT INTO circuits (bar_id, denomination, name, description, local_item, pi_kw
 (1, 'C-02', 'Tomacorrientes', 'Tomas de corriente generales', 'Local 102', 15.00, 0.6000, 9.00, 'operative_normal', false, NOW(), NOW()),
 (1, 'C-03', 'Escaleras Mecanicas', 'Escaleras 1 y 2', NULL, 50.00, 0.9000, 45.00, 'operative_normal', false, NOW(), NOW()),
 (1, 'C-04', 'Reserva Futura', NULL, NULL, 30.00, 1.0000, 30.00, 'reserve_r', false, NOW(), NOW());
+-- Nota: Si el circuito en reserva tiene fecha de vencimiento, usar la seccion 5 con reserve_since y reserve_expires_at
 
 -- Paso 4: Circuitos en Barra Emergencia (bar_id = 2)
 INSERT INTO circuits (bar_id, denomination, name, description, local_item, pi_kw, fd, md_kw, status, is_ups, created_at, updated_at) VALUES
@@ -284,10 +365,10 @@ INSERT INTO circuits (bar_id, secondary_bar_id, tertiary_bar_id, denomination, n
 -- Paso 7: Sub-circuitos (ejemplo: para el circuito 'Alumbrado General', necesitas el circuit_id)
 -- Primero obtener el ID: SELECT id FROM circuits WHERE bar_id = 1 AND denomination = 'C-01';
 -- Supongamos que el ID es 10:
-INSERT INTO sub_circuits (circuit_id, name, description, itm, mm2, pi_kw, fd, md_kw, created_at, updated_at) VALUES
-(10, 'Alumbrado Hall Norte', 'Luminarias LED hall norte', '3x20A', '3x2.5mm2', 8.00, 0.8000, 6.40, NOW(), NOW()),
-(10, 'Alumbrado Hall Sur', 'Luminarias LED hall sur', '3x20A', '3x2.5mm2', 8.00, 0.8000, 6.40, NOW(), NOW()),
-(10, 'Alumbrado Pasillo', 'Luminarias pasillo principal', '3x16A', '3x2.5mm2', 9.00, 0.8000, 7.20, NOW(), NOW());
+INSERT INTO sub_circuits (circuit_id, name, description, itm, mm2, pi_kw, fd, md_kw, status, created_at, updated_at) VALUES
+(10, 'Alumbrado Hall Norte', 'Luminarias LED hall norte', '3x20A', '3x2.5mm2', 8.00, 0.8000, 6.40, 'operative_normal', NOW(), NOW()),
+(10, 'Alumbrado Hall Sur',   'Luminarias LED hall sur',  '3x20A', '3x2.5mm2', 8.00, 0.8000, 6.40, 'operative_normal', NOW(), NOW()),
+(10, 'Alumbrado Pasillo',    'Luminarias pasillo principal', '3x16A', '3x2.5mm2', 9.00, 0.8000, 7.20, 'operative_normal', NOW(), NOW());
 
 -- Paso 8: Recalcular energia de la estacion
 WITH totals AS (
@@ -339,6 +420,11 @@ INSERT INTO circuits (bar_id, denomination, name, description, local_item, pi_kw
 -- Circuitos Barra Continuidad (bar_id = ___)
 INSERT INTO circuits (bar_id, denomination, name, description, local_item, pi_kw, fd, md_kw, status, is_ups, created_at, updated_at) VALUES
 (___, '___', '___', '___', '___', ___, ___, ___, 'operative_normal', false, NOW(), NOW());
+
+-- Sub-circuitos (circuit_id = ___)
+-- Primero obtener el ID: SELECT id FROM circuits WHERE bar_id = ___ AND denomination = '___';
+INSERT INTO sub_circuits (circuit_id, name, description, itm, mm2, pi_kw, fd, md_kw, status, created_at, updated_at) VALUES
+(___, '___', '___', '___', '___', ___, ___, ___, 'operative_normal', NOW(), NOW());
 
 -- Recalcular energia
 WITH totals AS (

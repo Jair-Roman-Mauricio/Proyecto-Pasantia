@@ -7,6 +7,7 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Card from '../ui/Card';
+import Modal from '../ui/Modal';
 
 export default function AuditTable() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -16,24 +17,30 @@ export default function AuditTable() {
   const [entityFilter, setEntityFilter] = useState('');
   const [flaggedFilter, setFlaggedFilter] = useState('');
 
+  // Flag modal state
+  const [flagTarget, setFlagTarget] = useState<AuditLog | null>(null);
+  const [flagReason, setFlagReason] = useState('');
+  const [flagLoading, setFlagLoading] = useState(false);
+
   useEffect(() => { loadLogs(); }, []);
 
-  const loadLogs = async (filters?: Record<string, string>) => {
-    const params: Record<string, string> = { limit: '200', ...filters };
-    const { data } = await api.get('/audit', { params });
-    setLogs(data);
-  };
-
-  const handleFilter = () => {
-    const params: Record<string, string> = {};
+  const buildParams = () => {
+    const params: Record<string, string> = { limit: '200' };
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
     if (actionFilter) params.action = actionFilter;
     if (entityFilter) params.entity_type = entityFilter;
     if (flaggedFilter === 'true') params.is_flagged = 'true';
     if (flaggedFilter === 'false') params.is_flagged = 'false';
-    loadLogs(params);
+    return params;
   };
+
+  const loadLogs = async (params?: Record<string, string>) => {
+    const { data } = await api.get('/audit', { params: params ?? { limit: '200' } });
+    setLogs(data);
+  };
+
+  const handleFilter = () => loadLogs(buildParams());
 
   const handleClear = () => {
     setStartDate('');
@@ -46,10 +53,38 @@ export default function AuditTable() {
 
   const hasFilters = startDate || endDate || actionFilter || entityFilter || flaggedFilter;
 
-  const handleFlag = async (log: AuditLog) => {
-    const reason = log.is_flagged ? null : prompt('Razon para destacar esta accion:');
-    await api.put(`/audit/${log.id}/flag`, { is_flagged: !log.is_flagged, flag_reason: reason });
-    handleFilter();
+  // Click star button
+  const handleFlagClick = async (log: AuditLog) => {
+    if (log.is_flagged) {
+      // Un-flag directly, no reason needed
+      await api.put(`/audit/${log.id}/flag`, { is_flagged: false, flag_reason: null });
+      setLogs(prev => prev.map(l => l.id === log.id ? { ...l, is_flagged: false, flag_reason: null } : l));
+    } else {
+      // Open modal to enter reason
+      setFlagTarget(log);
+      setFlagReason('');
+    }
+  };
+
+  // Confirm flagging from modal
+  const handleConfirmFlag = async () => {
+    if (!flagTarget || !flagReason.trim()) return;
+    setFlagLoading(true);
+    try {
+      await api.put(`/audit/${flagTarget.id}/flag`, { is_flagged: true, flag_reason: flagReason.trim() });
+      setLogs(prev => prev.map(l =>
+        l.id === flagTarget.id ? { ...l, is_flagged: true, flag_reason: flagReason.trim() } : l
+      ));
+      setFlagTarget(null);
+      setFlagReason('');
+    } finally {
+      setFlagLoading(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setFlagTarget(null);
+    setFlagReason('');
   };
 
   const handleExportExcel = async () => {
@@ -68,7 +103,10 @@ export default function AuditTable() {
 
   const columns = [
     { key: 'user_id', header: 'ID Usuario' },
-    { key: 'user_role', header: 'Rol', render: (l: AuditLog) => <Badge color={l.user_role === 'admin' ? 'green' : 'blue'}>{l.user_role}</Badge> },
+    {
+      key: 'user_role', header: 'Rol',
+      render: (l: AuditLog) => <Badge color={l.user_role === 'admin' ? 'green' : 'blue'}>{l.user_role}</Badge>,
+    },
     { key: 'user_name', header: 'Nombre' },
     { key: 'action_date', header: 'Fecha', render: (l: AuditLog) => new Date(l.action_date).toLocaleString() },
     { key: 'action', header: 'Accion' },
@@ -78,7 +116,11 @@ export default function AuditTable() {
       key: 'flagged',
       header: 'Destacar',
       render: (l: AuditLog) => (
-        <button onClick={() => handleFlag(l)} className="cursor-pointer p-1 rounded hover:bg-[var(--hover-bg)]">
+        <button
+          onClick={() => handleFlagClick(l)}
+          title={l.is_flagged ? (l.flag_reason ?? '') : 'Destacar registro'}
+          className="cursor-pointer p-1 rounded hover:bg-[var(--hover-bg)]"
+        >
           <Star size={16} className={l.is_flagged ? 'text-yellow-500 fill-yellow-500' : 'text-[var(--text-muted)]'} />
         </button>
       ),
@@ -148,9 +190,47 @@ export default function AuditTable() {
           columns={columns}
           data={logs}
           rowKey={(l) => l.id}
-          rowClassName={(l) => l.is_flagged ? 'bg-yellow-50 dark:bg-yellow-900/10' : ''}
+          rowClassName={(l) => l.is_flagged ? 'bg-yellow-500/10 border-l-4 border-yellow-500' : ''}
         />
       </div>
+
+      {/* Flag reason modal */}
+      <Modal isOpen={flagTarget !== null} onClose={handleCloseModal} title="Destacar registro" size="sm">
+        <div className="space-y-4">
+          {flagTarget && (
+            <div className="p-3 bg-[var(--bg-secondary)] rounded-lg text-sm text-[var(--text-secondary)] space-y-1">
+              <p><span className="font-medium text-[var(--text-primary)]">Accion:</span> {flagTarget.action}</p>
+              <p><span className="font-medium text-[var(--text-primary)]">Usuario:</span> {flagTarget.user_name}</p>
+              <p><span className="font-medium text-[var(--text-primary)]">Fecha:</span> {new Date(flagTarget.action_date).toLocaleString()}</p>
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              Razon <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={flagReason}
+              onChange={(e) => setFlagReason(e.target.value)}
+              placeholder="Indica por que este registro es importante..."
+              rows={3}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            />
+            {flagReason.trim() === '' && (
+              <p className="text-xs text-red-500 mt-1">La razon es obligatoria para destacar un registro.</p>
+            )}
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={handleCloseModal}>Cancelar</Button>
+            <Button
+              onClick={handleConfirmFlag}
+              disabled={!flagReason.trim() || flagLoading}
+            >
+              <Star size={14} className="mr-1" />
+              {flagLoading ? 'Guardando...' : 'Destacar'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -4,10 +4,20 @@ import api from '../../config/api';
 import type { Notification } from '../../types';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
+import Modal from '../ui/Modal';
+import Input from '../ui/Input';
 
 export default function NotificationList() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState('all');
+
+  // Extender reserva modal
+  const [extendTarget, setExtendTarget] = useState<number | null>(null);
+  const [extendDate, setExtendDate] = useState('');
+  const [extendLoading, setExtendLoading] = useState(false);
+
+  // Eliminar reserva
+  const [resolving, setResolving] = useState<number | null>(null);
 
   useEffect(() => { loadNotifications(); }, [filter]);
 
@@ -27,6 +37,29 @@ export default function NotificationList() {
   const handleDismiss = async (id: number) => {
     await api.put(`/notifications/${id}/dismiss`);
     loadNotifications();
+  };
+
+  const handleExtendConfirm = async () => {
+    if (!extendTarget || !extendDate) return;
+    setExtendLoading(true);
+    try {
+      await api.put(`/notifications/${extendTarget}/extend`, { extended_until: extendDate });
+      setExtendTarget(null);
+      setExtendDate('');
+      loadNotifications();
+    } finally {
+      setExtendLoading(false);
+    }
+  };
+
+  const handleResolveReserve = async (id: number) => {
+    setResolving(id);
+    try {
+      await api.put(`/notifications/${id}/resolve-reserve`);
+      loadNotifications();
+    } finally {
+      setResolving(null);
+    }
   };
 
   const getIcon = (type: string) => {
@@ -64,14 +97,55 @@ export default function NotificationList() {
                 <p className="text-sm text-[var(--text-primary)]">{n.message}</p>
                 <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(n.created_at).toLocaleString()}</p>
               </div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-wrap justify-end">
                 {!n.is_read && <Button variant="ghost" size="sm" onClick={() => handleMarkRead(n.id)}>Leido</Button>}
+                {n.type === 'reserve_no_contact' && (
+                  <>
+                    <Button variant="ghost" size="sm" onClick={() => { setExtendTarget(n.id); setExtendDate(''); }}>
+                      Extender
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleResolveReserve(n.id)}
+                      disabled={resolving === n.id}
+                    >
+                      {resolving === n.id ? '...' : 'Eliminar reserva'}
+                    </Button>
+                  </>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => handleDismiss(n.id)}>Descartar</Button>
               </div>
             </div>
           </Card>
         ))}
       </div>
+      <Modal
+        isOpen={extendTarget !== null}
+        onClose={() => { setExtendTarget(null); setExtendDate(''); }}
+        title="Extender reserva"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Selecciona hasta qué fecha se extiende el plazo de esta reserva.
+          </p>
+          <Input
+            label="Extender hasta"
+            type="date"
+            value={extendDate}
+            onChange={(e) => setExtendDate(e.target.value)}
+          />
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => { setExtendTarget(null); setExtendDate(''); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleExtendConfirm} disabled={!extendDate || extendLoading}>
+              {extendLoading ? 'Guardando...' : 'Confirmar'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

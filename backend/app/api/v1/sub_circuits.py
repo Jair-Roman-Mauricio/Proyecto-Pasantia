@@ -53,7 +53,13 @@ def create_sub_circuit(
         pi_kw=data.pi_kw,
         fd=data.fd,
         md_kw=md_kw,
+        status=data.status,
     )
+
+    if data.status in ("reserve_r", "reserve_equipped_re"):
+        sub.reserve_since = date.today()
+        sub.reserve_expires_at = data.reserve_expires_at
+
     db.add(sub)
     db.commit()
     db.refresh(sub)
@@ -125,8 +131,10 @@ def update_sub_circuit_status(
 
     if data.status in ("reserve_r", "reserve_equipped_re") and old_status == "operative_normal":
         sub.reserve_since = date.today()
+        sub.reserve_expires_at = data.reserve_expires_at
     elif data.status == "operative_normal":
         sub.reserve_since = None
+        sub.reserve_expires_at = None
 
     db.commit()
     db.refresh(sub)

@@ -18,7 +18,12 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
   const [piKw, setPiKw] = useState('');
   const [fd, setFd] = useState('1.0');
   const [mdKw, setMdKw] = useState('');
+  const [status, setStatus] = useState('operative_normal');
+  const [reserveExpiresAt, setReserveExpiresAt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isReserve = status === 'reserve_r' || status === 'reserve_equipped_re';
+  const today = new Date().toISOString().split('T')[0];
 
   const piNum = parseFloat(piKw) || 0;
   const fdNum = parseFloat(fd) || 1;
@@ -39,6 +44,7 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !piKw) return;
+    if (isReserve && !reserveExpiresAt) return;
     setIsSubmitting(true);
     try {
       await circuitService.createSubCircuit(circuitId, {
@@ -49,6 +55,8 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
         pi_kw: parseFloat(piKw),
         fd: parseFloat(fd),
         md_kw: parseFloat(mdKw) || parseFloat(calculatedMd),
+        status,
+        reserve_expires_at: isReserve ? reserveExpiresAt : undefined,
       });
       onCreated();
     } catch (error) {
@@ -88,6 +96,27 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
             placeholder="Ej: 3x4"
           />
         </div>
+        <div>
+          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Estado</label>
+          <select
+            value={status}
+            onChange={(e) => { setStatus(e.target.value); setReserveExpiresAt(''); }}
+            className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+          >
+            <option value="operative_normal">Operativo Normal</option>
+            <option value="reserve_r">Reserva (R)</option>
+            <option value="reserve_equipped_re">Reserva Equipada (R/E)</option>
+          </select>
+        </div>
+        {isReserve && (
+          <Input
+            label="Reserva válida hasta *"
+            type="date"
+            value={reserveExpiresAt}
+            onChange={(e) => setReserveExpiresAt(e.target.value)}
+            min={today}
+          />
+        )}
         <div className="grid grid-cols-3 gap-4">
           <Input
             label="PI (kW) *"
@@ -120,7 +149,7 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
         </p>
         <div className="flex gap-2 justify-end">
           <Button variant="secondary" type="button" onClick={onClose}>Cancelar</Button>
-          <Button type="submit" disabled={!name || !piKw || isSubmitting}>
+          <Button type="submit" disabled={!name || !piKw || (isReserve && !reserveExpiresAt) || isSubmitting}>
             {isSubmitting ? 'Creando...' : 'Crear Sub-circuito'}
           </Button>
         </div>

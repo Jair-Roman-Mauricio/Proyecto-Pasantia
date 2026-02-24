@@ -26,6 +26,7 @@ class SubCircuit(Base):
         String(30), nullable=False, default="operative_normal", index=True
     )
     reserve_since: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    reserve_expires_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
