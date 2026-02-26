@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+backend/.venv/
+backend/venv/
+backend/.pytest_cache/
+backend/tests/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Git y control de versiones
+.git/
+.gitignore
+
+# Documentacion
+*.md
+
+# Secretos — nunca incluir en la imagen
+backend/.env
