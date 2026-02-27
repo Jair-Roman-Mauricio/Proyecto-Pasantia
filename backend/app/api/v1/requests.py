@@ -14,6 +14,8 @@ from app.models.sub_circuit import SubCircuit
 from app.schemas.request import RequestCreate, RequestReject, RequestResponse
 from app.services.energy_calculator import EnergyCalculator
 from app.services.audit_service import AuditService
+from app.utils.db_helpers import safe_commit
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
 
@@ -112,7 +114,7 @@ def create_request(
         status="pending",
     )
     db.add(req)
-    db.commit()
+    safe_commit(db)
     db.refresh(req)
 
     audit = AuditService(db)
@@ -150,42 +152,49 @@ def approve_request(
 
     md_kw = req.requested_load_kw * req.fd
 
-    if req.circuit_id:
-        # Create sub-circuit on existing circuit
-        sub = SubCircuit(
-            circuit_id=req.circuit_id,
-            name=req.sub_circuit_name or f"Ampliacion Solicitud #{req.id}",
-            description=req.sub_circuit_description or req.justification,
-            itm=req.sub_circuit_itm,
-            mm2=req.sub_circuit_mm2,
-            pi_kw=req.requested_load_kw,
-            fd=req.fd,
-            md_kw=md_kw,
-        )
-        db.add(sub)
-        created_entity = {"sub_circuit_created": True}
-    else:
-        # Create new circuit on bar
-        circuit = Circuit(
-            bar_id=bar.id,
-            denomination=f"AMP-{req.id}",
-            name=f"Ampliacion Solicitud #{req.id}",
-            description=req.justification,
-            local_item=req.local_item,
-            pi_kw=req.requested_load_kw,
-            fd=req.fd,
-            md_kw=md_kw,
-            status="operative_normal",
-        )
-        db.add(circuit)
-        created_entity = {"circuit_created": True}
+    try:
+        if req.circuit_id:
+            # Create sub-circuit on existing circuit
+            sub = SubCircuit(
+                circuit_id=req.circuit_id,
+                name=req.sub_circuit_name or f"Ampliacion Solicitud #{req.id}",
+                description=req.sub_circuit_description or req.justification,
+                itm=req.sub_circuit_itm,
+                mm2=req.sub_circuit_mm2,
+                pi_kw=req.requested_load_kw,
+                fd=req.fd,
+                md_kw=md_kw,
+            )
+            db.add(sub)
+            created_entity = {"sub_circuit_created": True}
+        else:
+            # Create new circuit on bar
+            circuit = Circuit(
+                bar_id=bar.id,
+                denomination=f"AMP-{req.id}",
+                name=f"Ampliacion Solicitud #{req.id}",
+                description=req.justification,
+                local_item=req.local_item,
+                pi_kw=req.requested_load_kw,
+                fd=req.fd,
+                md_kw=md_kw,
+                status="operative_normal",
+            )
+            db.add(circuit)
+            created_entity = {"circuit_created": True}
 
-    req.status = "approved"
-    req.reviewed_by = admin.id
-    req.reviewed_at = datetime.now(timezone.utc)
+        req.status = "approved"
+        req.reviewed_by = admin.id
+        req.reviewed_at = datetime.now(timezone.utc)
 
-    db.commit()
-    db.refresh(req)
+        db.commit()
+        db.refresh(req)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error al aprobar la solicitud: dato duplicado o invalido")
+    except OperationalError:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Error de conexion con la base de datos al aprobar la solicitud")
 
     # Recalculate energy
     calculator = EnergyCalculator(db)
@@ -221,7 +230,7 @@ def reject_request(
     req.reviewed_by = admin.id
     req.reviewed_at = datetime.now(timezone.utc)
 
-    db.commit()
+    safe_commit(db)
     db.refresh(req)
 
     audit = AuditService(db)

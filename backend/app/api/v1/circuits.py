@@ -12,6 +12,7 @@ from app.models.circuit import Circuit
 from app.schemas.circuit import CircuitCreate, CircuitUpdate, CircuitStatusUpdate, CircuitResponse
 from app.services.energy_calculator import EnergyCalculator
 from app.services.audit_service import AuditService
+from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/circuits", tags=["Circuits"])
 
@@ -110,7 +111,7 @@ def create_circuit(
         circuit.reserve_expires_at = data.reserve_expires_at
 
     db.add(circuit)
-    db.commit()
+    safe_commit(db)
     db.refresh(circuit)
 
     # Recalculate station energy
@@ -161,7 +162,7 @@ def update_circuit(
     for field, value in update_data.items():
         setattr(circuit, field, value)
 
-    db.commit()
+    safe_commit(db)
     db.refresh(circuit)
 
     # Recalculate station energy
@@ -203,7 +204,7 @@ def update_circuit_status(
         circuit.reserve_since = None
         circuit.reserve_expires_at = None
 
-    db.commit()
+    safe_commit(db)
     db.refresh(circuit)
 
     bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
@@ -240,7 +241,7 @@ def delete_circuit(
     }
 
     db.delete(circuit)
-    db.commit()
+    safe_commit(db)
 
     calculator = EnergyCalculator(db)
     calculator.recalculate_station(bar.station_id)

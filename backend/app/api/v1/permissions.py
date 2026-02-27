@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.permission import Permission
 from app.schemas.permission import PermissionResponse, PermissionsBulkUpdate
 from app.utils.constants import PERMISSION_FEATURES
+from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/permissions", tags=["Permissions"])
 
@@ -63,5 +64,5 @@ def update_user_permissions(
             )
             db.add(perm)
 
-    db.commit()
+    safe_commit(db)
     return {"message": "Permisos actualizados"}

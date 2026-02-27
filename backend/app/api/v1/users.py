@@ -9,6 +9,7 @@ from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services.audit_service import AuditService
 from app.utils.security import hash_password
 from app.utils.constants import PERMISSION_FEATURES
+from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -51,7 +52,7 @@ def create_user(
         status="active",
     )
     db.add(user)
-    db.commit()
+    safe_commit(db)
     db.refresh(user)
 
     # Create default permissions for opersac users
@@ -63,7 +64,7 @@ def create_user(
                 is_allowed=True,
             )
             db.add(perm)
-        db.commit()
+        safe_commit(db)
 
     audit = AuditService(db)
     audit.log(
@@ -97,7 +98,7 @@ def update_user(
     if data.password is not None:
         user.password_hash = hash_password(data.password)
 
-    db.commit()
+    safe_commit(db)
     db.refresh(user)
 
     audit = AuditService(db)

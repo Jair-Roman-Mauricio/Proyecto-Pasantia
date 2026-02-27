@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.circuit import Circuit
 from app.models.notification import Notification
 from app.schemas.notification import NotificationResponse, NotificationExtend
+from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -49,7 +50,7 @@ def mark_as_read(
     if not notif:
         raise HTTPException(status_code=404, detail="Notificacion no encontrada")
     notif.is_read = True
-    db.commit()
+    safe_commit(db)
     return {"message": "Marcado como leido"}
 
 
@@ -65,7 +66,7 @@ def extend_notification(
         raise HTTPException(status_code=404, detail="Notificacion no encontrada")
     notif.extended_until = data.extended_until
     notif.is_read = True
-    db.commit()
+    safe_commit(db)
     return {"message": "Tiempo extendido"}
 
 
@@ -79,7 +80,7 @@ def dismiss_notification(
     if not notif:
         raise HTTPException(status_code=404, detail="Notificacion no encontrada")
     notif.is_dismissed = True
-    db.commit()
+    safe_commit(db)
     return {"message": "Notificacion descartada"}
 
 
@@ -101,5 +102,5 @@ def resolve_reserve(
             circuit.reserve_since = None
             circuit.reserve_expires_at = None
     notif.is_dismissed = True
-    db.commit()
+    safe_commit(db)
     return {"message": "Reserva eliminada"}

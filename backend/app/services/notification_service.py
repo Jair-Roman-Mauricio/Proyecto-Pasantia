@@ -54,19 +54,22 @@ def check_expiring_reserves(db: Session) -> None:
     )
 
     for circuit in circuits:
-        if _has_active_notification(db, circuit.id, today):
-            continue
-        name = circuit.name or circuit.denomination
-        bar = circuit.bar
-        station_id = bar.station_id if bar else None
-        db.add(
-            Notification(
-                circuit_id=circuit.id,
-                station_id=station_id,
-                type="reserve_no_contact",
-                message=_make_message(name, circuit.reserve_expires_at, today),
+        try:
+            if _has_active_notification(db, circuit.id, today):
+                continue
+            name = circuit.name or circuit.denomination
+            bar = circuit.bar
+            station_id = bar.station_id if bar else None
+            db.add(
+                Notification(
+                    circuit_id=circuit.id,
+                    station_id=station_id,
+                    type="reserve_no_contact",
+                    message=_make_message(name, circuit.reserve_expires_at, today),
+                )
             )
-        )
+        except Exception:
+            continue
 
     # ── Caso 2: Sub-circuitos con reserve_expires_at <= hoy ──────────────────
     sub_circuits = (
@@ -81,20 +84,23 @@ def check_expiring_reserves(db: Session) -> None:
     )
 
     for sub in sub_circuits:
-        if _has_active_notification(db, sub.circuit_id, today):
-            continue
-        name = sub.name
-        circuit = sub.circuit
-        bar = circuit.bar if circuit else None
-        station_id = bar.station_id if bar else None
-        db.add(
-            Notification(
-                circuit_id=sub.circuit_id,
-                station_id=station_id,
-                type="reserve_no_contact",
-                message=_make_message(f"sub-circuito {name}", sub.reserve_expires_at, today),
+        try:
+            if _has_active_notification(db, sub.circuit_id, today):
+                continue
+            name = sub.name
+            circuit = sub.circuit
+            bar = circuit.bar if circuit else None
+            station_id = bar.station_id if bar else None
+            db.add(
+                Notification(
+                    circuit_id=sub.circuit_id,
+                    station_id=station_id,
+                    type="reserve_no_contact",
+                    message=_make_message(f"sub-circuito {name}", sub.reserve_expires_at, today),
+                )
             )
-        )
+        except Exception:
+            continue
 
     # ── Caso 3: Notificaciones con extended_until == hoy → crear nueva ────────
     expiring_extended = (
@@ -108,29 +114,35 @@ def check_expiring_reserves(db: Session) -> None:
     )
 
     for notif in expiring_extended:
-        if not notif.circuit_id:
-            continue
-        circuit = (
-            db.query(Circuit)
-            .options(joinedload(Circuit.bar))
-            .filter(Circuit.id == notif.circuit_id)
-            .first()
-        )
-        if circuit and circuit.status in ("reserve_r", "reserve_equipped_re"):
-            notif.is_dismissed = True
-            name = circuit.name or circuit.denomination
-            bar = circuit.bar
-            station_id = bar.station_id if bar else None
-            db.add(
-                Notification(
-                    circuit_id=circuit.id,
-                    station_id=station_id,
-                    type="reserve_no_contact",
-                    message=(
-                        f"La extensión de reserva del circuito {name} venció hoy ({today}). "
-                        f"Puede extender nuevamente o eliminar la reserva."
-                    ),
-                )
+        try:
+            if not notif.circuit_id:
+                continue
+            circuit = (
+                db.query(Circuit)
+                .options(joinedload(Circuit.bar))
+                .filter(Circuit.id == notif.circuit_id)
+                .first()
             )
+            if circuit and circuit.status in ("reserve_r", "reserve_equipped_re"):
+                notif.is_dismissed = True
+                name = circuit.name or circuit.denomination
+                bar = circuit.bar
+                station_id = bar.station_id if bar else None
+                db.add(
+                    Notification(
+                        circuit_id=circuit.id,
+                        station_id=station_id,
+                        type="reserve_no_contact",
+                        message=(
+                            f"La extensión de reserva del circuito {name} venció hoy ({today}). "
+                            f"Puede extender nuevamente o eliminar la reserva."
+                        ),
+                    )
+                )
+        except Exception:
+            continue
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()

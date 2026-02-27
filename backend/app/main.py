@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.config import settings
@@ -22,6 +23,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Handler global — captura cualquier excepcion no manejada y devuelve 500
+# en lugar de dejar caer el servidor
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor. Intente nuevamente."},
+    )
+
 # Include API routes
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
@@ -38,6 +48,9 @@ def on_startup():
         db = SessionLocal()
         try:
             check_expiring_reserves(db)
+        except Exception:
+            # Si falla, el scheduler no se desregistra y reintentara manana
+            pass
         finally:
             db.close()
 

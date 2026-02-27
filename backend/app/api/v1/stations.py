@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.station import Station
 from app.schemas.station import StationResponse, StationUpdate, PowerSummary
 from app.services.energy_calculator import EnergyCalculator
+from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/stations", tags=["Stations"])
 
@@ -62,7 +63,7 @@ def update_station(
     if data.transformer_capacity_kw is not None:
         station.transformer_capacity_kw = data.transformer_capacity_kw
 
-    db.commit()
+    safe_commit(db)
 
     # Recalculate energy
     calculator = EnergyCalculator(db)

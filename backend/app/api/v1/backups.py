@@ -20,6 +20,7 @@ from app.models.backup import Backup
 from app.schemas.backup import BackupCreate, BackupResponse
 from app.services.audit_service import AuditService
 from app.services.energy_calculator import EnergyCalculator
+from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/backups", tags=["Backups"])
 
@@ -93,7 +94,7 @@ def create_backup(
         size_bytes=size_bytes,
     )
     db.add(backup)
-    db.commit()
+    safe_commit(db)
     db.refresh(backup)
 
     audit = AuditService(db)
@@ -186,9 +187,9 @@ def restore_backup(
             ))
         db.commit()
 
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al restaurar backup: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al restaurar backup. Verifique la integridad del archivo.")
 
     # Log restore action
     audit = AuditService(db)
@@ -216,7 +217,7 @@ def delete_backup(
     file_name = backup.file_name
 
     db.delete(backup)
-    db.commit()
+    safe_commit(db)
 
     audit = AuditService(db)
     audit.log(

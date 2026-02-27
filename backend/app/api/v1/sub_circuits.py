@@ -13,6 +13,7 @@ from app.models.bar import Bar
 from app.schemas.sub_circuit import SubCircuitCreate, SubCircuitUpdate, SubCircuitResponse, SubCircuitStatusUpdate
 from app.services.energy_calculator import EnergyCalculator
 from app.services.audit_service import AuditService
+from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/sub-circuits", tags=["Sub-Circuits"])
 
@@ -61,7 +62,7 @@ def create_sub_circuit(
         sub.reserve_expires_at = data.reserve_expires_at
 
     db.add(sub)
-    db.commit()
+    safe_commit(db)
     db.refresh(sub)
 
     # Recalculate station energy (sub-circuits affect totals)
@@ -94,7 +95,7 @@ def delete_sub_circuit(
     info = {"name": sub.name, "circuit_id": sub.circuit_id}
     circuit_id = sub.circuit_id
     db.delete(sub)
-    db.commit()
+    safe_commit(db)
 
     # Recalculate station energy (sub-circuits affect totals)
     circuit = db.query(Circuit).filter(Circuit.id == circuit_id).first()
@@ -136,7 +137,7 @@ def update_sub_circuit_status(
         sub.reserve_since = None
         sub.reserve_expires_at = None
 
-    db.commit()
+    safe_commit(db)
     db.refresh(sub)
 
     circuit = db.query(Circuit).filter(Circuit.id == sub.circuit_id).first()
