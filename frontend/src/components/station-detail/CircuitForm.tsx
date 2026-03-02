@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import type { Bar } from '../../types';
+import type { Bar, Circuit } from '../../types';
 import { circuitService } from '../../services/circuitService';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
@@ -75,7 +75,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
     const payload = buildPayload();
 
     try {
-      await circuitService.create(barId, payload);
+      await circuitService.create(barId, payload as Partial<Circuit> & { force?: boolean });
       onCreated();
     } catch (err: any) {
       const detail = err.response?.data?.detail;
@@ -95,7 +95,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
     setIsSubmitting(true);
     setForceMessage(null);
     try {
-      await circuitService.create(barId, { ...pendingPayload, force: true });
+      await circuitService.create(barId, { ...pendingPayload, force: true } as Partial<Circuit> & { force?: boolean });
       onCreated();
     } catch {
       setError('Error al crear el circuito');

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Trash2, Eye } from 'lucide-react';
 import type { Circuit, Bar } from '../../types';
-import { CIRCUIT_STATUS_COLORS } from '../../config/constants';
 import Table from '../ui/Table';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';

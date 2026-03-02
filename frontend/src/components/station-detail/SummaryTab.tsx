@@ -111,7 +111,7 @@ export default function SummaryTab({ station }: SummaryTabProps) {
                   <Cell key={`cell-${index}`} fill={colors[index]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value: number) => `${value} kW`} />
+              <Tooltip formatter={(value: number | undefined) => `${value ?? 0} kW`} />
               <Legend />
             </PieChart>
           </ResponsiveContainer>
