@@ -21,7 +21,13 @@ from app.models.audit_log import AuditLog
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
-@router.get("/demand-evolution")
+@router.get(
+    "/demand-evolution",
+    summary="Reporte de evolución de demanda",
+    description="""Retorna datos de demanda eléctrica por estación. **Requiere permiso:** `view_reports`\n\n**Sin filtros de fecha:** Retorna los valores actuales de todas las estaciones.\n\n**Con `start_date` / `end_date`:** Calcula la demanda acumulada solo de circuitos y sub-circuitos creados en ese rango de fechas.\n\nÚtil para analizar el crecimiento de carga en el tiempo.""",
+    response_description="Lista de estaciones con capacidad, demanda máxima y disponible",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_reports no habilitado"}},
+)
 def get_demand_evolution(
     start_date: datetime | None = None,
     end_date: datetime | None = None,
@@ -91,7 +97,13 @@ def get_demand_evolution(
     return data
 
 
-@router.get("/requests-per-station")
+@router.get(
+    "/requests-per-station",
+    summary="Reporte de solicitudes por estación",
+    description="Retorna la cantidad de solicitudes agrupadas por estación y estado (pending, approved, rejected). Filtrable por rango de fechas. **Requiere permiso:** `view_reports`",
+    response_description="Lista con conteos de solicitudes por estación",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_reports no habilitado"}},
+)
 def get_requests_per_station(
     start_date: datetime | None = None,
     end_date: datetime | None = None,
@@ -121,7 +133,13 @@ def get_requests_per_station(
     return list(data.values())
 
 
-@router.get("/export/excel")
+@router.get(
+    "/export/excel",
+    summary="Exportar reportes a Excel",
+    description="""Descarga un archivo Excel con dos hojas y gráficos incluidos. **Requiere permiso:** `view_reports`\n\n**Hoja 1 — Demanda Eléctrica:** Tabla con capacidad, demanda y disponible por estación + gráfico de líneas.\n\n**Hoja 2 — Solicitudes por Estación:** Tabla con conteos de solicitudes + gráfico de barras apiladas.\n\nFiltrable por rango de fechas (`start_date`, `end_date`).""",
+    response_description="Archivo Excel (reportes.xlsx)",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_reports no habilitado"}},
+)
 def export_reports_excel(
     start_date: datetime | None = None,
     end_date: datetime | None = None,

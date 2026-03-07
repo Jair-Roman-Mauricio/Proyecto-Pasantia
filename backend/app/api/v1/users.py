@@ -14,12 +14,33 @@ from app.utils.db_helpers import safe_commit
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.get("", response_model=list[UserResponse])
+@router.get(
+    "",
+    response_model=list[UserResponse],
+    summary="Listar todos los usuarios",
+    description="Retorna la lista completa de usuarios registrados en el sistema, ordenados por ID. Solo accesible por administradores.",
+    response_description="Lista de usuarios con sus datos completos",
+    responses={
+        401: {"description": "No autenticado"},
+        403: {"description": "Se requiere rol admin"},
+    },
+)
 def get_users(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     return db.query(User).order_by(User.id).all()
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get(
+    "/{user_id}",
+    response_model=UserResponse,
+    summary="Obtener un usuario por ID",
+    description="Retorna los datos completos de un usuario específico. Solo accesible por administradores.",
+    response_description="Datos del usuario solicitado",
+    responses={
+        401: {"description": "No autenticado"},
+        403: {"description": "Se requiere rol admin"},
+        404: {"description": "Usuario no encontrado"},
+    },
+)
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -31,7 +52,29 @@ def get_user(
     return user
 
 
-@router.post("", response_model=UserResponse)
+@router.post(
+    "",
+    response_model=UserResponse,
+    summary="Crear nuevo usuario",
+    description="""
+Crea un nuevo usuario en el sistema. Solo accesible por administradores.
+
+**Roles disponibles:**
+- `admin` — Acceso total al sistema
+- `opersac` — Acceso limitado, controlado por permisos
+
+Al crear un usuario con rol `opersac`, se le asignan automáticamente **todos los permisos habilitados** por defecto.
+El administrador puede luego ajustar los permisos individualmente en `PUT /permissions/users/{user_id}`.
+
+La acción queda registrada en el log de auditoría.
+""",
+    response_description="Datos del usuario recién creado",
+    responses={
+        400: {"description": "El nombre de usuario ya existe, o el rol es inválido"},
+        401: {"description": "No autenticado"},
+        403: {"description": "Se requiere rol admin"},
+    },
+)
 def create_user(
     data: UserCreate,
     db: Session = Depends(get_db),
@@ -78,7 +121,28 @@ def create_user(
     return user
 
 
-@router.put("/{user_id}", response_model=UserResponse)
+@router.put(
+    "/{user_id}",
+    response_model=UserResponse,
+    summary="Actualizar usuario",
+    description="""
+Actualiza los datos de un usuario existente. Solo accesible por administradores.
+
+**Campos actualizables:**
+- `full_name` — Nombre completo
+- `password` — Nueva contraseña (se hashea automáticamente)
+- `status` — Estado del usuario: `active`, `inactive`, `reported`
+
+Solo los campos incluidos en el body serán actualizados. La acción queda registrada en auditoría.
+""",
+    response_description="Datos del usuario actualizado",
+    responses={
+        400: {"description": "Estado inválido"},
+        401: {"description": "No autenticado"},
+        403: {"description": "Se requiere rol admin"},
+        404: {"description": "Usuario no encontrado"},
+    },
+)
 def update_user(
     user_id: int,
     data: UserUpdate,

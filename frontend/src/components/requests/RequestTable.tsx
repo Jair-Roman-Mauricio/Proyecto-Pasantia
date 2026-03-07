@@ -45,11 +45,11 @@ export default function RequestTable() {
   const statusLabel = (s: string) => s === 'pending' ? 'Pendiente' : s === 'approved' ? 'Aprobado' : 'Rechazado';
 
   const columns = [
-    { key: 'id', header: 'ID' },
-    { key: 'opersac_name', header: 'Opersac' },
+    { key: 'id', header: 'ID', className: 'hidden sm:table-cell' },
+    { key: 'opersac_name', header: 'Opersac', className: 'hidden md:table-cell' },
     { key: 'station_name', header: 'Estacion' },
-    { key: 'bar_type', header: 'Barra', render: (r: LoadRequest) => r.bar_type.charAt(0).toUpperCase() + r.bar_type.slice(1) },
-    { key: 'created_at', header: 'Fecha', render: (r: LoadRequest) => new Date(r.created_at).toLocaleDateString() },
+    { key: 'bar_type', header: 'Barra', render: (r: LoadRequest) => r.bar_type.charAt(0).toUpperCase() + r.bar_type.slice(1), className: 'hidden sm:table-cell' },
+    { key: 'created_at', header: 'Fecha', render: (r: LoadRequest) => new Date(r.created_at).toLocaleDateString(), className: 'hidden sm:table-cell' },
     { key: 'requested_load_kw', header: 'Carga (kW)', render: (r: LoadRequest) => `${r.requested_load_kw} kW` },
     { key: 'status', header: 'Estado', render: (r: LoadRequest) => <Badge color={statusColor(r.status)}>{statusLabel(r.status)}</Badge> },
     { key: 'actions', header: 'Accion', render: (r: LoadRequest) => <Button variant="ghost" size="sm" onClick={() => setSelectedRequest(r)}>Ver Detalle</Button> },

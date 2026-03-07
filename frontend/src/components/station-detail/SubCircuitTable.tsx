@@ -37,11 +37,11 @@ export default function SubCircuitTable({ subCircuits, isEditMode, onDelete }: S
       header: 'Circuito',
       render: (s: SubCircuit) => <span className="font-medium">{s.name}</span>,
     },
-    { key: 'description', header: 'Descripcion' },
-    { key: 'itm', header: 'ITM' },
-    { key: 'mm2', header: 'MM2' },
-    { key: 'pi_kw', header: 'PI (kW)', render: (s: SubCircuit) => Number(s.pi_kw).toFixed(2) },
-    { key: 'fd', header: 'F.D', render: (s: SubCircuit) => Number(s.fd).toFixed(4) },
+    { key: 'description', header: 'Descripcion', className: 'hidden md:table-cell' },
+    { key: 'itm', header: 'ITM', className: 'hidden sm:table-cell' },
+    { key: 'mm2', header: 'MM2', className: 'hidden sm:table-cell' },
+    { key: 'pi_kw', header: 'PI (kW)', render: (s: SubCircuit) => Number(s.pi_kw).toFixed(2), className: 'hidden lg:table-cell' },
+    { key: 'fd', header: 'F.D', render: (s: SubCircuit) => Number(s.fd).toFixed(4), className: 'hidden lg:table-cell' },
     { key: 'md_kw', header: 'MD (kW)', render: (s: SubCircuit) => Number(s.md_kw).toFixed(2) },
     ...(isEditMode
       ? [{

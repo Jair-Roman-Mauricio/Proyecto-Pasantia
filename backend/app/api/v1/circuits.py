@@ -17,7 +17,14 @@ from app.utils.db_helpers import safe_commit
 router = APIRouter(prefix="/circuits", tags=["Circuits"])
 
 
-@router.get("/bar/{bar_id}", response_model=list[CircuitResponse])
+@router.get(
+    "/bar/{bar_id}",
+    response_model=list[CircuitResponse],
+    summary="Listar circuitos de una barra",
+    description="Retorna todos los circuitos instalados en la barra indicada, ordenados por ID. **Requiere permiso:** `view_circuits`",
+    response_description="Lista de circuitos de la barra",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_circuits no habilitado"}},
+)
 def get_circuits_by_bar(
     bar_id: int,
     db: Session = Depends(get_db),
@@ -32,7 +39,14 @@ def get_circuits_by_bar(
     return circuits
 
 
-@router.get("/{circuit_id}", response_model=CircuitResponse)
+@router.get(
+    "/{circuit_id}",
+    response_model=CircuitResponse,
+    summary="Obtener un circuito por ID",
+    description="Retorna los datos completos de un circuito específico. **Requiere permiso:** `view_circuits`",
+    response_description="Datos del circuito solicitado",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_circuits no habilitado"}, 404: {"description": "Circuito no encontrado"}},
+)
 def get_circuit(
     circuit_id: int,
     db: Session = Depends(get_db),
@@ -44,7 +58,14 @@ def get_circuit(
     return circuit
 
 
-@router.post("/bar/{bar_id}", response_model=CircuitResponse)
+@router.post(
+    "/bar/{bar_id}",
+    response_model=CircuitResponse,
+    summary="Crear circuito en una barra",
+    description="""Crea un nuevo circuito en la barra indicada. Solo admin.\n\n**MD:** Si no se provee `md_kw`, se calcula como `pi_kw × fd`.\n\n**Capacidad:** Si excede la disponible, retorna 400 con `requires_force: true`. Enviar `"force": true` para confirmar.\n\n**UPS:** Requiere `secondary_bar_id` y `tertiary_bar_id` distintas entre sí y a la primaria.\n\nEstados: `operative_normal`, `reserve_r`, `reserve_equipped_re`, `inactive`""",
+    response_description="Datos del circuito recién creado",
+    responses={400: {"description": "Capacidad excedida o validación UPS fallida"}, 401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Barra no encontrada"}},
+)
 def create_circuit(
     bar_id: int,
     data: CircuitCreate,
@@ -139,7 +160,14 @@ def create_circuit(
     return circuit
 
 
-@router.put("/{circuit_id}", response_model=CircuitResponse)
+@router.put(
+    "/{circuit_id}",
+    response_model=CircuitResponse,
+    summary="Actualizar datos de un circuito",
+    description="Actualiza campos del circuito. Solo los campos incluidos en el body se modifican. Si cambia `pi_kw` o `fd` sin incluir `md_kw`, se recalcula automáticamente (`md_kw = pi_kw × fd`). Recalcula energía de la estación. Solo admin.",
+    response_description="Datos del circuito actualizado",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Circuito no encontrado"}},
+)
 def update_circuit(
     circuit_id: int,
     data: CircuitUpdate,
@@ -183,7 +211,14 @@ def update_circuit(
     return circuit
 
 
-@router.put("/{circuit_id}/status", response_model=CircuitResponse)
+@router.put(
+    "/{circuit_id}/status",
+    response_model=CircuitResponse,
+    summary="Cambiar estado de un circuito",
+    description="""Cambia el estado operativo del circuito. Solo admin.\n\nEstados: `operative_normal` | `reserve_r` | `reserve_equipped_re` | `inactive`\n\nAl pasar a reserva desde `operative_normal` se registran `reserve_since` y `reserve_expires_at`. Al regresar a `operative_normal` se borran.""",
+    response_description="Datos del circuito con estado actualizado",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Circuito no encontrado"}},
+)
 def update_circuit_status(
     circuit_id: int,
     data: CircuitStatusUpdate,
@@ -223,7 +258,13 @@ def update_circuit_status(
     return circuit
 
 
-@router.delete("/{circuit_id}")
+@router.delete(
+    "/{circuit_id}",
+    summary="Eliminar un circuito",
+    description="Elimina permanentemente el circuito y sus sub-circuitos (cascade). Recalcula energía de la estación. ⚠ Irreversible. Solo admin.",
+    response_description="Mensaje de confirmación",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Circuito no encontrado"}},
+)
 def delete_circuit(
     circuit_id: int,
     db: Session = Depends(get_db),

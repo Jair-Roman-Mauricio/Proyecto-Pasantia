@@ -71,20 +71,22 @@ export default function StationDetailPage() {
       </div>
 
       {/* Tab navigation */}
-      <div className="flex gap-1 mb-6 bg-[var(--bg-primary)] rounded-lg p-1 border border-[var(--border-color)] w-fit">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer ${
-              activeTab === tab.id
-                ? 'bg-primary-600 text-white'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--hover-bg)]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="overflow-x-auto mb-6">
+        <div className="flex gap-1 bg-[var(--bg-primary)] rounded-lg p-1 border border-[var(--border-color)] w-fit min-w-full sm:min-w-0">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'bg-primary-600 text-white'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--hover-bg)]'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab content */}

@@ -122,9 +122,9 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
   if (isLoading) return <div className="flex justify-center py-12"><Spinner size="lg" /></div>;
 
   return (
-    <div className="flex gap-4">
+    <div className="flex flex-col md:flex-row gap-4">
       {/* Left panel - Tree */}
-      <div className="w-64 shrink-0">
+      <div className="w-full md:w-64 md:shrink-0">
         <Card className="sticky top-0">
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Tableros</h3>
           <div className="space-y-1">
@@ -184,7 +184,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
           </Card>
         ) : selectedBar ? (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-start gap-2 justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)]">
                   {station.name} - {selectedCircuit ? `${selectedCircuit.denomination} / ${selectedCircuit.name}` : selectedBar.name}
@@ -193,7 +193,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
                   {selectedBar.status === 'operative' ? 'Operativo' : 'Inactivo'}
                 </Badge>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {isAdmin && canViewCircuits && selectedCircuit && (
                   <Button variant="secondary" size="sm" onClick={() => setShowSubCircuitForm(true)}>
                     <Plus size={14} className="mr-1" /> Agregar Sub-circuito

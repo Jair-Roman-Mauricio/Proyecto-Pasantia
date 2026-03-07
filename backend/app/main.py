@@ -9,9 +9,62 @@ from app.database import engine, Base, SessionLocal
 from app.models import *  # noqa: F401 - Import all models for table creation
 
 app = FastAPI(
-    title=settings.PROJECT_NAME,
+    title="Línea 1 Metro — API de Gestión Energética",
+    description="""
+## Sistema de Gestión Energética — Línea 1 del Metro de Lima
+
+API REST para la administración de la infraestructura eléctrica de las **26 estaciones** de la Línea 1 del Metro de Lima.
+
+### Roles de usuario
+
+| Rol | Descripción |
+|-----|-------------|
+| **admin** | Acceso total: gestión de circuitos, aprobación de solicitudes, auditoría, backups |
+| **opersac** | Acceso limitado por permisos: puede enviar solicitudes, ver estaciones y reportes |
+
+### Autenticación
+
+Todos los endpoints (excepto `/auth/login`) requieren un token JWT en el header:
+```
+Authorization: Bearer <token>
+```
+
+Obtén el token en `POST /api/v1/auth/login`.
+
+### Permisos disponibles (opersac)
+
+- `view_stations` — Ver estaciones, barras y circuitos
+- `view_circuits` — Ver detalles de circuitos y sub-circuitos
+- `send_requests` — Enviar solicitudes de ampliación de carga
+- `add_observations` — Agregar observaciones a la infraestructura
+- `view_reports` — Acceder a reportes y exportación Excel
+
+### Jerarquía de datos
+```
+Estación → Barra (normal / emergencia / continuidad) → Circuito → Sub-circuito
+```
+    """,
+    version="1.1.6",
+    contact={"name": "Administración del Sistema", "email": "admin@linea1metro.pe"},
+    license_info={"name": "Uso interno — Línea 1 Metro de Lima"},
     openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
     docs_url="/docs",
+    openapi_tags=[
+        {"name": "Auth", "description": "Autenticación con JWT. Obtén tu token aquí antes de usar cualquier otro endpoint."},
+        {"name": "Users", "description": "Gestión de usuarios del sistema. Solo accesible por administradores."},
+        {"name": "Stations", "description": "Estaciones de la Línea 1 (E01 Villa El Salvador → E26 Bayóvar). Requiere permiso `view_stations`."},
+        {"name": "Bars", "description": "Barras eléctricas de cada estación: normal, emergencia y continuidad. Requiere permiso `view_stations`."},
+        {"name": "Circuits", "description": "Circuitos eléctricos instalados en cada barra. Requiere permiso `view_circuits` para lectura, rol admin para escritura."},
+        {"name": "Sub-Circuits", "description": "Sub-circuitos (ampliaciones) dentro de un circuito existente. Solo admin puede crear/eliminar."},
+        {"name": "Requests", "description": "Solicitudes de ampliación de carga enviadas por operadores OPERSAC. Admin las aprueba o rechaza."},
+        {"name": "Observations", "description": "Notas y observaciones técnicas sobre circuitos, sub-circuitos o barras. Severidades: urgent, warning, recommendation."},
+        {"name": "Notifications", "description": "Alertas automáticas del sistema sobre reservas próximas a vencer sin contacto registrado. Solo admin."},
+        {"name": "Permissions", "description": "Control de acceso por feature para usuarios OPERSAC. Admin gestiona los permisos de cada usuario."},
+        {"name": "Audit", "description": "Log de todas las acciones realizadas en el sistema. Solo admin. Exportable a Excel."},
+        {"name": "Backups", "description": "Respaldos completos de la base de datos en formato JSON. Solo admin puede crear, restaurar o eliminar."},
+        {"name": "Reports", "description": "Reportes de demanda eléctrica y solicitudes por estación. Exportable a Excel con gráficos."},
+        {"name": "Images", "description": "Imágenes asociadas a estaciones, barras o circuitos (unifilares, fotos). Admin sube, todos ven."},
+    ],
 )
 
 # CORS

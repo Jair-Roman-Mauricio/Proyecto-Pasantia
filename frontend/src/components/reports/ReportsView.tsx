@@ -50,7 +50,7 @@ export default function ReportsView() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
         <h2 className="text-xl font-bold text-[var(--text-primary)]">Reportes</h2>
         <Button variant="secondary" size="sm" onClick={handleExport}>
           <Download size={16} className="mr-2" /> Exportar Excel

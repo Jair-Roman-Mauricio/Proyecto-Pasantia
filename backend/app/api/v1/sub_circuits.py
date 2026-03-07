@@ -18,7 +18,14 @@ from app.utils.db_helpers import safe_commit
 router = APIRouter(prefix="/sub-circuits", tags=["Sub-Circuits"])
 
 
-@router.get("/circuit/{circuit_id}", response_model=list[SubCircuitResponse])
+@router.get(
+    "/circuit/{circuit_id}",
+    response_model=list[SubCircuitResponse],
+    summary="Listar sub-circuitos de un circuito",
+    description="Retorna todos los sub-circuitos (ampliaciones) del circuito indicado. **Requiere permiso:** `view_circuits`",
+    response_description="Lista de sub-circuitos",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_circuits no habilitado"}},
+)
 def get_sub_circuits(
     circuit_id: int,
     db: Session = Depends(get_db),
@@ -32,7 +39,14 @@ def get_sub_circuits(
     )
 
 
-@router.post("/circuit/{circuit_id}", response_model=SubCircuitResponse)
+@router.post(
+    "/circuit/{circuit_id}",
+    response_model=SubCircuitResponse,
+    summary="Crear sub-circuito en un circuito",
+    description="Crea un sub-circuito (ampliación) dentro del circuito indicado. Si no se provee `md_kw`, se calcula como `pi_kw × fd`. Recalcula energía de la estación. Solo admin.",
+    response_description="Datos del sub-circuito recién creado",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Circuito no encontrado"}},
+)
 def create_sub_circuit(
     circuit_id: int,
     data: SubCircuitCreate,
@@ -82,7 +96,13 @@ def create_sub_circuit(
     return sub
 
 
-@router.delete("/{sub_circuit_id}")
+@router.delete(
+    "/{sub_circuit_id}",
+    summary="Eliminar un sub-circuito",
+    description="Elimina permanentemente el sub-circuito. Recalcula energía de la estación. ⚠ Irreversible. Solo admin.",
+    response_description="Mensaje de confirmación",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Sub-circuito no encontrado"}},
+)
 def delete_sub_circuit(
     sub_circuit_id: int,
     db: Session = Depends(get_db),
@@ -116,7 +136,14 @@ def delete_sub_circuit(
     return {"message": "Sub-circuito eliminado exitosamente"}
 
 
-@router.put("/{sub_circuit_id}/status", response_model=SubCircuitResponse)
+@router.put(
+    "/{sub_circuit_id}/status",
+    response_model=SubCircuitResponse,
+    summary="Cambiar estado de un sub-circuito",
+    description="Cambia el estado del sub-circuito: `operative_normal`, `reserve_r`, `reserve_equipped_re`. Al pasar a reserva se registran fechas de inicio/expiración. Solo admin.",
+    response_description="Datos del sub-circuito con estado actualizado",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Sub-circuito no encontrado"}},
+)
 def update_sub_circuit_status(
     sub_circuit_id: int,
     data: SubCircuitStatusUpdate,

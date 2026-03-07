@@ -8,10 +8,12 @@ import {
   Database,
   ClipboardList,
   Eye,
+  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSidebar } from '../../context/SidebarContext';
+import { useEffect } from 'react';
 
 const adminOptions = [
   { id: 'map', label: 'Mapa de Linea 1', icon: Map },
@@ -32,24 +34,42 @@ const allOpersacOptions = [
 
 export default function Sidebar() {
   const { user, hasPermission } = useAuth();
-  const { activeOption, setActiveOption, viewMode, toggleViewMode } = useSidebar();
+  const { activeOption, setActiveOption, viewMode, toggleViewMode, mobileOpen, closeMobile } = useSidebar();
   const navigate = useNavigate();
 
   const opersacOptions = allOpersacOptions.filter((opt) => hasPermission(opt.permission));
   const options = viewMode === 'admin' && user?.role === 'admin' ? adminOptions : opersacOptions;
 
+  // Close sidebar on route change (mobile)
+  useEffect(() => { closeMobile(); }, [activeOption]);
+
   return (
-    <aside className="w-64 shrink-0 h-screen sticky top-0 flex flex-col overflow-y-auto" style={{ backgroundColor: 'var(--sidebar-bg)', color: 'var(--sidebar-text)' }}>
+    <aside
+      className={`
+        fixed inset-y-0 left-0 z-40 w-64 flex flex-col overflow-y-auto transition-transform duration-300
+        md:static md:translate-x-0 md:shrink-0 md:h-screen md:sticky md:top-0
+        ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}
+      style={{ backgroundColor: 'var(--sidebar-bg)', color: 'var(--sidebar-text)' }}
+    >
       {/* Logo */}
       <div className="p-4 border-b border-gray-700">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center text-white font-bold text-lg">
+          <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center text-white font-bold text-lg shrink-0">
             L1
           </div>
-          <div>
-            <h1 className="text-sm font-bold">Linea 1 del Metro</h1>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-sm font-bold truncate">Linea 1 del Metro</h1>
             <p className="text-xs text-gray-400">Gestion Energetica</p>
           </div>
+          {/* Close button (mobile only) */}
+          <button
+            onClick={closeMobile}
+            className="md:hidden p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors cursor-pointer"
+            aria-label="Cerrar menú"
+          >
+            <X size={18} />
+          </button>
         </div>
       </div>
 

@@ -114,7 +114,41 @@ export default function StationMap() {
         26 estaciones &mdash; Bayovar a Villa El Salvador
       </p>
 
-      <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl p-4 overflow-x-auto">
+      {/* Vista mobile — lista vertical de estaciones */}
+      <div className="md:hidden bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl p-4">
+        <div className="relative">
+          <div className="absolute left-[11px] top-5 bottom-5 w-0.5 bg-green-400/50" />
+          <div className="space-y-0">
+            {displayStations.map((station, index) => {
+              const isEndpoint = index === 0 || index === 25;
+              const color = STATUS_COLORS[station.status] || STATUS_COLORS.green;
+              return (
+                <button
+                  key={station.id}
+                  onClick={() => setSelectedStation(station)}
+                  className="relative flex items-center gap-3 w-full text-left py-1.5 px-1 hover:bg-[var(--hover-bg)] rounded-lg transition-colors cursor-pointer"
+                >
+                  {isEndpoint ? (
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center shrink-0 z-10">
+                      <span className="text-white font-bold" style={{ fontSize: '9px' }}>L1</span>
+                    </div>
+                  ) : (
+                    <div className="w-6 h-6 flex items-center justify-center shrink-0 z-10">
+                      <div className="w-3 h-3 rounded-full border-2 border-[var(--card-bg)]" style={{ backgroundColor: color }} />
+                    </div>
+                  )}
+                  <span className={`text-sm ${isEndpoint ? 'font-bold text-[var(--text-primary)]' : 'font-medium text-[var(--text-secondary)]'}`}>
+                    {station.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Vista desktop — mapa SVG */}
+      <div className="hidden md:block bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl p-4 overflow-x-auto">
         <svg
           viewBox="0 0 1280 510"
           className="w-full min-w-[800px]"
@@ -236,7 +270,7 @@ export default function StationMap() {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-6 mt-4">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-red-500" />
           <span className="text-xs text-[var(--text-muted)]">Debe energia</span>

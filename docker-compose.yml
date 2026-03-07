@@ -1,7 +1,23 @@
 version: "3.9"
 
+# ══════════════════════════════════════════════════════════════════
+#  Linea 1 Metro — Docker Compose
+#
+#  MODO SUPABASE (default) — BD externa:
+#    docker compose up -d
+#    → levanta: backend + frontend
+#    → la BD se configura en backend/.env (DATABASE_URL)
+#
+#  MODO BD LOCAL — PostgreSQL en contenedor:
+#    docker compose --profile local up -d
+#    → levanta: db + backend + frontend
+# ══════════════════════════════════════════════════════════════════
+
 services:
+
+  # ── Base de datos local (solo con --profile local) ────────────────
   db:
+    profiles: [local]
     image: postgres:16-alpine
     restart: always
     env_file: backend/.env
@@ -15,18 +31,17 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Backend FastAPI ───────────────────────────────────────────────
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     restart: always
     env_file: backend/.env
-    depends_on:
-      db:
-        condition: service_healthy
     volumes:
       - storage_data:/app/storage
 
+  # ── Frontend (nginx) ──────────────────────────────────────────────
   frontend:
     build:
       context: .
@@ -34,9 +49,6 @@ services:
     restart: always
     ports:
       - "80:80"
-      - "443:443"
-    volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - backend
 

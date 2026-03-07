@@ -29,8 +29,8 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)]">
-      <div className="w-full max-w-md">
-        <div className="bg-[var(--card-bg)] rounded-2xl shadow-xl border border-[var(--border-color)] p-8">
+      <div className="w-full max-w-md px-4">
+        <div className="bg-[var(--card-bg)] rounded-2xl shadow-xl border border-[var(--border-color)] p-6 sm:p-8">
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl mx-auto mb-4">

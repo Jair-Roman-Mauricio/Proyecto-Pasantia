@@ -9,6 +9,9 @@ interface SidebarContextType {
   toggleViewMode: () => void;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
+  mobileOpen: boolean;
+  toggleMobile: () => void;
+  closeMobile: () => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
@@ -17,14 +20,18 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   const [activeOption, setActiveOption] = useState('map');
   const [viewMode, setViewMode] = useState<ViewMode>('admin');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const toggleViewMode = () => {
     setViewMode((prev) => (prev === 'admin' ? 'opersac' : 'admin'));
   };
 
+  const toggleMobile = () => setMobileOpen((prev) => !prev);
+  const closeMobile = () => setMobileOpen(false);
+
   return (
     <SidebarContext.Provider
-      value={{ activeOption, setActiveOption, viewMode, toggleViewMode, isCollapsed, setIsCollapsed }}
+      value={{ activeOption, setActiveOption, viewMode, toggleViewMode, isCollapsed, setIsCollapsed, mobileOpen, toggleMobile, closeMobile }}
     >
       {children}
     </SidebarContext.Provider>

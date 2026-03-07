@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { Sun, Moon, LogOut, ChevronDown } from 'lucide-react';
+import { Sun, Moon, LogOut, ChevronDown, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useSidebar } from '../../context/SidebarContext';
 import Badge from '../ui/Badge';
 
 export default function Header() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { toggleMobile } = useSidebar();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -21,7 +23,17 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="h-14 flex items-center justify-end gap-4 px-6 border-b border-[var(--border-color)] bg-[var(--bg-primary)]">
+    <header className="h-14 flex items-center justify-between gap-4 px-4 md:px-6 border-b border-[var(--border-color)] bg-[var(--bg-primary)]">
+      {/* Hamburger (mobile only) */}
+      <button
+        onClick={toggleMobile}
+        className="md:hidden p-2 rounded-lg hover:bg-[var(--hover-bg)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+        aria-label="Abrir menú"
+      >
+        <Menu size={20} />
+      </button>
+
+      <div className="flex items-center gap-4 ml-auto">
       {/* Theme toggle */}
       <button
         onClick={toggleTheme}
@@ -60,6 +72,7 @@ export default function Header() {
             </button>
           </div>
         )}
+      </div>
       </div>
     </header>
   );

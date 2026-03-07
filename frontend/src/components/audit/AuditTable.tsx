@@ -102,16 +102,17 @@ export default function AuditTable() {
   };
 
   const columns = [
-    { key: 'user_id', header: 'ID Usuario' },
+    { key: 'user_id', header: 'ID Usuario', className: 'hidden lg:table-cell' },
     {
       key: 'user_role', header: 'Rol',
       render: (l: AuditLog) => <Badge color={l.user_role === 'admin' ? 'green' : 'blue'}>{l.user_role}</Badge>,
+      className: 'hidden sm:table-cell',
     },
-    { key: 'user_name', header: 'Nombre' },
+    { key: 'user_name', header: 'Nombre', className: 'hidden md:table-cell' },
     { key: 'action_date', header: 'Fecha', render: (l: AuditLog) => new Date(l.action_date).toLocaleString() },
     { key: 'action', header: 'Accion' },
-    { key: 'entity_type', header: 'Entidad' },
-    { key: 'entity_id', header: 'ID Entidad' },
+    { key: 'entity_type', header: 'Entidad', className: 'hidden sm:table-cell' },
+    { key: 'entity_id', header: 'ID Entidad', className: 'hidden lg:table-cell' },
     {
       key: 'flagged',
       header: 'Destacar',

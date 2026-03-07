@@ -50,7 +50,13 @@ def _enrich_request(req: Request, db: Session) -> RequestResponse:
     )
 
 
-@router.get("/circuit-options/{bar_id}")
+@router.get(
+    "/circuit-options/{bar_id}",
+    summary="Circuitos disponibles para solicitud",
+    description="Lista los circuitos de la barra indicada para que el operador OPERSAC seleccione a cuál agregar un sub-circuito. **Requiere permiso:** `send_requests`",
+    response_description="Lista simplificada de circuitos (id, denominación, nombre)",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso send_requests no habilitado"}},
+)
 def get_circuit_options_for_request(
     bar_id: int,
     db: Session = Depends(get_db),
@@ -65,13 +71,27 @@ def get_circuit_options_for_request(
     return [{"id": c.id, "denomination": c.denomination, "name": c.name} for c in circuits]
 
 
-@router.get("", response_model=list[RequestResponse])
+@router.get(
+    "",
+    response_model=list[RequestResponse],
+    summary="Listar todas las solicitudes",
+    description="Retorna todas las solicitudes del sistema ordenadas por fecha de creación (más recientes primero). Solo admin.",
+    response_description="Lista completa de solicitudes con datos del solicitante y estación",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}},
+)
 def get_requests(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     requests = db.query(Request).order_by(Request.created_at.desc()).all()
     return [_enrich_request(r, db) for r in requests]
 
 
-@router.get("/my", response_model=list[RequestResponse])
+@router.get(
+    "/my",
+    response_model=list[RequestResponse],
+    summary="Listar mis solicitudes",
+    description="Retorna las solicitudes enviadas por el usuario autenticado, ordenadas por fecha. **Requiere permiso:** `send_requests`",
+    response_description="Lista de solicitudes del usuario actual",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso send_requests no habilitado"}},
+)
 def get_my_requests(
     db: Session = Depends(get_db),
     user: User = Depends(check_permission("send_requests")),
@@ -85,7 +105,14 @@ def get_my_requests(
     return [_enrich_request(r, db) for r in requests]
 
 
-@router.post("", response_model=RequestResponse)
+@router.post(
+    "",
+    response_model=RequestResponse,
+    summary="Crear solicitud de ampliación",
+    description="""Crea una nueva solicitud de ampliación de carga. **Requiere permiso:** `send_requests`\n\n**Tipos de solicitud:**\n- Sin `circuit_id`: solicita un **nuevo circuito** en la barra indicada\n- Con `circuit_id`: solicita un **sub-circuito** en un circuito existente\n\nLa solicitud queda en estado `pending` hasta que el admin la apruebe o rechace.""",
+    response_description="Datos de la solicitud creada",
+    responses={400: {"description": "Tipo de barra inválido"}, 401: {"description": "No autenticado"}, 403: {"description": "Permiso send_requests no habilitado"}, 404: {"description": "Estación no encontrada"}},
+)
 def create_request(
     data: RequestCreate,
     db: Session = Depends(get_db),
@@ -129,7 +156,14 @@ def create_request(
     return _enrich_request(req, db)
 
 
-@router.put("/{request_id}/approve", response_model=RequestResponse)
+@router.put(
+    "/{request_id}/approve",
+    response_model=RequestResponse,
+    summary="Aprobar una solicitud",
+    description="""Aprueba una solicitud pendiente. Solo admin.\n\nAl aprobar:\n- Si la solicitud tiene `circuit_id`: crea un **sub-circuito** en ese circuito\n- Si no tiene `circuit_id`: crea un **nuevo circuito** en la barra de la estación\n\nLa energía de la estación se recalcula automáticamente.""",
+    response_description="Datos de la solicitud aprobada",
+    responses={400: {"description": "La solicitud no está en estado pending"}, 401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Solicitud o barra no encontrada"}},
+)
 def approve_request(
     request_id: int,
     db: Session = Depends(get_db),
@@ -212,7 +246,14 @@ def approve_request(
     return _enrich_request(req, db)
 
 
-@router.put("/{request_id}/reject", response_model=RequestResponse)
+@router.put(
+    "/{request_id}/reject",
+    response_model=RequestResponse,
+    summary="Rechazar una solicitud",
+    description="Rechaza una solicitud pendiente indicando el motivo. Solo admin. No crea ningún circuito ni sub-circuito.",
+    response_description="Datos de la solicitud rechazada",
+    responses={400: {"description": "La solicitud no está en estado pending"}, 401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Solicitud no encontrada"}},
+)
 def reject_request(
     request_id: int,
     data: RequestReject,

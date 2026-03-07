@@ -93,28 +93,28 @@ export default function NotificationList() {
           <Card key={n.id} className={!n.is_read ? 'border-l-4 border-l-primary-500' : ''}>
             <div className="flex items-start gap-3">
               {getIcon(n.type)}
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="text-sm text-[var(--text-primary)]">{n.message}</p>
                 <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(n.created_at).toLocaleString()}</p>
-              </div>
-              <div className="flex gap-1 flex-wrap justify-end">
-                {!n.is_read && <Button variant="ghost" size="sm" onClick={() => handleMarkRead(n.id)}>Leido</Button>}
-                {n.type === 'reserve_no_contact' && (
-                  <>
-                    <Button variant="ghost" size="sm" onClick={() => { setExtendTarget(n.id); setExtendDate(''); }}>
-                      Extender
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleResolveReserve(n.id)}
-                      disabled={resolving === n.id}
-                    >
-                      {resolving === n.id ? '...' : 'Eliminar reserva'}
-                    </Button>
-                  </>
-                )}
-                <Button variant="ghost" size="sm" onClick={() => handleDismiss(n.id)}>Descartar</Button>
+                <div className="flex gap-1 flex-wrap mt-2">
+                  {!n.is_read && <Button variant="ghost" size="sm" onClick={() => handleMarkRead(n.id)}>Leido</Button>}
+                  {n.type === 'reserve_no_contact' && (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => { setExtendTarget(n.id); setExtendDate(''); }}>
+                        Extender
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleResolveReserve(n.id)}
+                        disabled={resolving === n.id}
+                      >
+                        {resolving === n.id ? '...' : 'Eliminar reserva'}
+                      </Button>
+                    </>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => handleDismiss(n.id)}>Descartar</Button>
+                </div>
               </div>
             </div>
           </Card>

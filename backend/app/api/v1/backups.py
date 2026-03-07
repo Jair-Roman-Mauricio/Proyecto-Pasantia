@@ -39,7 +39,14 @@ def _serialize_model(obj) -> dict:
     return data
 
 
-@router.get("", response_model=list[BackupResponse])
+@router.get(
+    "",
+    response_model=list[BackupResponse],
+    summary="Listar backups",
+    description="Lista todos los backups creados, ordenados del más reciente al más antiguo. Incluye el nombre del creador, tamaño y si contiene logs de auditoría. Solo admin.",
+    response_description="Lista de backups disponibles",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}},
+)
 def get_backups(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     backups = db.query(Backup).order_by(Backup.created_at.desc()).all()
     result = []
@@ -60,7 +67,14 @@ def get_backups(db: Session = Depends(get_db), _: User = Depends(require_admin))
     return result
 
 
-@router.post("", response_model=BackupResponse)
+@router.post(
+    "",
+    response_model=BackupResponse,
+    summary="Crear backup",
+    description="""Crea un respaldo completo de la base de datos en formato JSON. Solo admin.\n\nEl backup incluye: estaciones, barras, circuitos, sub-circuitos, observaciones, notificaciones y solicitudes.\n\nOpcionalmente puede incluir los logs de auditoría (`includes_audit: true`).\n\nEl backup se guarda en la BD con nombre de archivo `backup_YYYYMMDD_HHMMSS.json`.""",
+    response_description="Metadatos del backup creado",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}},
+)
 def create_backup(
     data: BackupCreate,
     db: Session = Depends(get_db),
@@ -118,7 +132,13 @@ def create_backup(
     )
 
 
-@router.post("/{backup_id}/restore")
+@router.post(
+    "/{backup_id}/restore",
+    summary="Restaurar backup",
+    description="""Restaura la base de datos a partir de un backup existente. Solo admin.\n\n**⚠ ADVERTENCIA: Esta acción es DESTRUCTIVA e IRREVERSIBLE.**\n\nEliminará todos los datos actuales (estaciones, barras, circuitos, sub-circuitos, observaciones, notificaciones, solicitudes) y los reemplazará con los del backup.\n\nTras la restauración se recalculan las energías de todas las estaciones y se resetean las secuencias de IDs.""",
+    response_description="Mensaje de confirmación",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Backup no encontrado"}, 500: {"description": "Error al restaurar — verificar integridad del backup"}},
+)
 def restore_backup(
     backup_id: int,
     db: Session = Depends(get_db),
@@ -204,7 +224,13 @@ def restore_backup(
     return {"message": "Backup restaurado exitosamente"}
 
 
-@router.delete("/{backup_id}")
+@router.delete(
+    "/{backup_id}",
+    summary="Eliminar backup",
+    description="Elimina el registro del backup de la base de datos. Solo admin. La acción queda registrada en auditoría.",
+    response_description="Mensaje de confirmación",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Backup no encontrado"}},
+)
 def delete_backup(
     backup_id: int,
     db: Session = Depends(get_db),

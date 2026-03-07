@@ -46,10 +46,10 @@ export default function UserTable() {
   const statusColor = (s: string) => s === 'active' ? 'green' : s === 'inactive' ? 'gray' : 'red';
 
   const columns = [
-    { key: 'id', header: 'ID' },
+    { key: 'id', header: 'ID', className: 'hidden sm:table-cell' },
     { key: 'role', header: 'Rol', render: (u: User) => <Badge color={u.role === 'admin' ? 'green' : 'blue'}>{u.role}</Badge> },
     { key: 'full_name', header: 'Nombre' },
-    { key: 'status', header: 'Estado', render: (u: User) => <Badge color={statusColor(u.status)}>{u.status}</Badge> },
+    { key: 'status', header: 'Estado', render: (u: User) => <Badge color={statusColor(u.status)}>{u.status}</Badge>, className: 'hidden sm:table-cell' },
     { key: 'actions', header: 'Acciones', render: (u: User) => <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>Editar</Button> },
   ];
 

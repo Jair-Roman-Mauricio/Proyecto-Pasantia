@@ -27,7 +27,14 @@ def _enrich(obs: Observation, db: Session) -> ObservationResponse:
     )
 
 
-@router.get("/circuit/{circuit_id}", response_model=list[ObservationResponse])
+@router.get(
+    "/circuit/{circuit_id}",
+    response_model=list[ObservationResponse],
+    summary="Observaciones de un circuito",
+    description="Retorna las observaciones del circuito indicado, ordenadas por fecha (más recientes primero). Cualquier usuario autenticado puede verlas.",
+    response_description="Lista de observaciones del circuito",
+    responses={401: {"description": "No autenticado"}},
+)
 def get_circuit_observations(
     circuit_id: int,
     db: Session = Depends(get_db),
@@ -42,7 +49,14 @@ def get_circuit_observations(
     return [_enrich(o, db) for o in obs]
 
 
-@router.get("/bar/{bar_id}", response_model=list[ObservationResponse])
+@router.get(
+    "/bar/{bar_id}",
+    response_model=list[ObservationResponse],
+    summary="Observaciones de una barra",
+    description="Retorna las observaciones de la barra indicada, ordenadas por fecha. Cualquier usuario autenticado puede verlas.",
+    response_description="Lista de observaciones de la barra",
+    responses={401: {"description": "No autenticado"}},
+)
 def get_bar_observations(
     bar_id: int,
     db: Session = Depends(get_db),
@@ -57,7 +71,14 @@ def get_bar_observations(
     return [_enrich(o, db) for o in obs]
 
 
-@router.post("", response_model=ObservationResponse)
+@router.post(
+    "",
+    response_model=ObservationResponse,
+    summary="Crear observación",
+    description="""Crea una observación técnica sobre un elemento de la infraestructura. **Requiere permiso:** `add_observations`\n\nDebe especificarse al menos uno de: `circuit_id`, `sub_circuit_id` o `bar_id`.\n\nSeveridades:\n- `urgent` — Requiere atención inmediata\n- `warning` — Advertencia técnica\n- `recommendation` — Sugerencia de mejora""",
+    response_description="Datos de la observación creada",
+    responses={400: {"description": "Severidad inválida o ningún elemento especificado"}, 401: {"description": "No autenticado"}, 403: {"description": "Permiso add_observations no habilitado"}},
+)
 def create_observation(
     data: ObservationCreate,
     db: Session = Depends(get_db),
@@ -87,7 +108,14 @@ def create_observation(
     return _enrich(obs, db)
 
 
-@router.delete("/{observation_id}", status_code=204)
+@router.delete(
+    "/{observation_id}",
+    status_code=204,
+    summary="Eliminar observación",
+    description="Elimina una observación existente. Solo admin. La acción queda registrada en auditoría.",
+    response_description="Sin contenido (204)",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Observación no encontrada"}},
+)
 def delete_observation(
     observation_id: int,
     db: Session = Depends(get_db),

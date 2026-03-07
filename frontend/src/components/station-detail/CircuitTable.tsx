@@ -57,10 +57,10 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, onView, o
           header: 'Circuito',
           render: (c: Circuit) => <span className="font-medium">{c.name}</span>,
         }]),
-    { key: 'description', header: 'Descripcion' },
-    { key: 'local_item', header: 'Local/ITEM' },
-    { key: 'pi_kw', header: 'PI (kW)', render: (c: Circuit) => Number(c.pi_kw).toFixed(2) },
-    { key: 'fd', header: 'F.D', render: (c: Circuit) => Number(c.fd).toFixed(4) },
+    { key: 'description', header: 'Descripcion', className: 'hidden md:table-cell' },
+    { key: 'local_item', header: 'Local/ITEM', className: 'hidden sm:table-cell' },
+    { key: 'pi_kw', header: 'PI (kW)', render: (c: Circuit) => Number(c.pi_kw).toFixed(2), className: 'hidden lg:table-cell' },
+    { key: 'fd', header: 'F.D', render: (c: Circuit) => Number(c.fd).toFixed(4), className: 'hidden lg:table-cell' },
     { key: 'md_kw', header: 'MD (kW)', render: (c: Circuit) => Number(c.md_kw).toFixed(2) },
     ...(isEditMode
       ? [{

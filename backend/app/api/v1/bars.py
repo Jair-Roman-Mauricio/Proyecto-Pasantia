@@ -11,7 +11,27 @@ from app.services.energy_calculator import EnergyCalculator
 router = APIRouter(prefix="/bars", tags=["Bars"])
 
 
-@router.get("/station/{station_id}", response_model=list[BarResponse])
+@router.get(
+    "/station/{station_id}",
+    response_model=list[BarResponse],
+    summary="Listar barras de una estación",
+    description="""
+Retorna las barras eléctricas de la estación indicada. Cada estación tiene 3 barras:
+
+| Tipo | Descripción |
+|------|-------------|
+| `normal` | Barra principal de distribución |
+| `emergency` | Barra de emergencia (generador / UPS general) |
+| `continuity` | Barra de continuidad (sistemas críticos) |
+
+**Requiere permiso:** `view_stations`
+""",
+    response_description="Lista de barras de la estación ordenadas por tipo",
+    responses={
+        401: {"description": "No autenticado"},
+        403: {"description": "Permiso view_stations no habilitado"},
+    },
+)
 def get_bars_by_station(
     station_id: int,
     db: Session = Depends(get_db),
@@ -26,7 +46,18 @@ def get_bars_by_station(
     return bars
 
 
-@router.get("/{bar_id}", response_model=BarResponse)
+@router.get(
+    "/{bar_id}",
+    response_model=BarResponse,
+    summary="Obtener una barra por ID",
+    description="Retorna los datos de una barra eléctrica específica. **Requiere permiso:** `view_stations`",
+    response_description="Datos de la barra solicitada",
+    responses={
+        401: {"description": "No autenticado"},
+        403: {"description": "Permiso view_stations no habilitado"},
+        404: {"description": "Barra no encontrada"},
+    },
+)
 def get_bar(
     bar_id: int,
     db: Session = Depends(get_db),
@@ -38,7 +69,24 @@ def get_bar(
     return bar
 
 
-@router.get("/{bar_id}/power-summary")
+@router.get(
+    "/{bar_id}/power-summary",
+    summary="Resumen de potencia de una barra",
+    description="""
+Retorna el resumen energético de una barra eléctrica específica:
+- Capacidad total de la barra (kW y A)
+- Demanda máxima acumulada de todos sus circuitos activos
+- Potencia disponible restante
+
+**Requiere permiso:** `view_stations`
+""",
+    response_description="Resumen de capacidad y demanda de la barra",
+    responses={
+        401: {"description": "No autenticado"},
+        403: {"description": "Permiso view_stations no habilitado"},
+        404: {"description": "Barra no encontrada"},
+    },
+)
 def get_bar_power_summary(
     bar_id: int,
     db: Session = Depends(get_db),

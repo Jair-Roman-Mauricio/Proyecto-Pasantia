@@ -29,7 +29,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
   const [forceMessage, setForceMessage] = useState<string | null>(null);
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
 
-  const isReserve = status === 'reserve_r' || status === 'reserve_equipped_re';
+  const isReserve = !isUps && (status === 'reserve_r' || status === 'reserve_equipped_re');
   const today = new Date().toISOString().split('T')[0];
 
   const mdKw = (parseFloat(piKw) || 0) * (parseFloat(fd) || 1);
