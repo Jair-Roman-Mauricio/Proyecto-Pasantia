@@ -1,0 +1,17 @@
+# Claude Code internal files
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+!backend/.env.example
+venv/
+.venv/
+
+# Storage uploads
+backend/storage/
+
+# OS
+.DS_Store
+Thumbs.db

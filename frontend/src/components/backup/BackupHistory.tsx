@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Plus, RotateCcw, Trash2, Download, Database } from 'lucide-react';
 import api from '../../config/api';
 import type { Backup } from '../../types';
 import Table from '../ui/Table';
@@ -10,6 +10,7 @@ import Input from '../ui/Input';
 export default function BackupHistory() {
   const [backups, setBackups] = useState<Backup[]>([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [pgDumpLoading, setPgDumpLoading] = useState(false);
   const [showRestore, setShowRestore] = useState<Backup | null>(null);
   const [showDelete, setShowDelete] = useState<Backup | null>(null);
   const [description, setDescription] = useState('');
@@ -36,6 +37,32 @@ export default function BackupHistory() {
     setConfirmText('');
   };
 
+  const handlePgDump = async () => {
+    setPgDumpLoading(true);
+    try {
+      const response = await api.get('/backups/pgdump/download', { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      a.download = `pgdump_${date}.sql`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setPgDumpLoading(false);
+    }
+  };
+
+  const handleDownload = async (b: Backup) => {
+    const response = await api.get(`/backups/${b.id}/download`, { responseType: 'blob' });
+    const url = URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = b.file_name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDelete = async () => {
     if (!showDelete) return;
     await api.delete(`/backups/${showDelete.id}`);
@@ -51,6 +78,9 @@ export default function BackupHistory() {
     { key: 'size_bytes', header: 'Tamano', render: (b: Backup) => b.size_bytes ? `${(b.size_bytes / 1024).toFixed(1)} KB` : '-' },
     { key: 'actions', header: 'Acciones', render: (b: Backup) => (
       <div className="flex gap-2">
+        <Button variant="ghost" size="sm" onClick={() => handleDownload(b)}>
+          <Download size={14} className="mr-1" /> Descargar
+        </Button>
         <Button variant="secondary" size="sm" onClick={() => setShowRestore(b)}>
           <RotateCcw size={14} className="mr-1" /> Restaurar
         </Button>
@@ -65,9 +95,15 @@ export default function BackupHistory() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-[var(--text-primary)]">Historial de Backups</h2>
-        <Button size="sm" onClick={() => setShowCreate(true)}>
-          <Plus size={16} className="mr-1" /> Crear Backup
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={handlePgDump} disabled={pgDumpLoading}>
+            <Database size={16} className="mr-1" />
+            {pgDumpLoading ? 'Exportando...' : 'Exportar pg_dump'}
+          </Button>
+          <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Plus size={16} className="mr-1" /> Crear Backup
+          </Button>
+        </div>
       </div>
       <Table columns={columns} data={backups} rowKey={(b) => b.id} />
 

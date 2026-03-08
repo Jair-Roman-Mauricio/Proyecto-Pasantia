@@ -1,10 +1,18 @@
+import glob
+import io
 import json
+import os
+import shutil
+import subprocess
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import require_admin
 from app.models.user import User
@@ -222,6 +230,81 @@ def restore_backup(
     )
 
     return {"message": "Backup restaurado exitosamente"}
+
+
+def _find_pgdump() -> str:
+    path = shutil.which("pg_dump")
+    if path:
+        return path
+    # Fallback Windows
+    candidates = glob.glob(r"C:\Program Files\PostgreSQL\*\bin\pg_dump.exe")
+    # Fallback Linux/Ubuntu
+    candidates += glob.glob("/usr/lib/postgresql/*/bin/pg_dump")
+    candidates += ["/usr/bin/pg_dump"]
+    existing = [p for p in sorted(candidates) if os.path.isfile(p)]
+    if existing:
+        return existing[-1]
+    raise HTTPException(
+        status_code=503,
+        detail="pg_dump no encontrado. Instale postgresql-client o agréguelo al PATH.",
+    )
+
+
+@router.get(
+    "/pgdump/download",
+    summary="Exportar pg_dump",
+    description="Ejecuta pg_dump contra la base de datos actual y descarga un archivo .sql completo. Solo admin.",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 500: {"description": "Error al ejecutar pg_dump"}},
+)
+def download_pgdump(_: User = Depends(require_admin)):
+    parsed = urlparse(settings.DATABASE_URL)
+    host = parsed.hostname
+    port = str(parsed.port or 5432)
+    user = parsed.username
+    password = parsed.password or ""
+    dbname = parsed.path.lstrip("/")
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = password
+
+    pgdump = _find_pgdump()
+    result = subprocess.run(
+        [pgdump, "-h", host, "-p", port, "-U", user, "-d", dbname, "--no-owner", "--no-acl"],
+        capture_output=True,
+        env=env,
+    )
+
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail="Error al ejecutar pg_dump")
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return StreamingResponse(
+        io.BytesIO(result.stdout),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="pgdump_{timestamp}.sql"'},
+    )
+
+
+@router.get(
+    "/{backup_id}/download",
+    summary="Descargar backup",
+    description="Descarga el archivo JSON del backup. Solo admin.",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Backup no encontrado"}},
+)
+def download_backup(
+    backup_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    backup = db.query(Backup).filter(Backup.id == backup_id).first()
+    if not backup:
+        raise HTTPException(status_code=404, detail="Backup no encontrado")
+    content = json.dumps(backup.backup_data, ensure_ascii=False, indent=2).encode("utf-8")
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{backup.file_name}"'},
+    )
 
 
 @router.delete(

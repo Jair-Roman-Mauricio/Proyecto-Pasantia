@@ -90,12 +90,15 @@ export default function ReportsView() {
         <Card>
           <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Evolucion de Demanda Electrica (kW)</h3>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={320}>
               <LineChart data={demandData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis dataKey="station_code" stroke="var(--text-muted)" fontSize={11} />
                 <YAxis stroke="var(--text-muted)" fontSize={11} />
-                <Tooltip />
+                <Tooltip
+                  contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                  cursor={{ fill: 'rgba(128,128,128,0.08)' }}
+                />
                 <Legend />
                 <Line type="monotone" dataKey="max_demand_kw" name="Demanda Real" stroke="#ef4444" strokeWidth={2} />
                 <Line type="monotone" dataKey="transformer_capacity_kw" name="Capacidad Maxima" stroke="#22c55e" strokeWidth={2} strokeDasharray="5 5" />
@@ -107,12 +110,15 @@ export default function ReportsView() {
         <Card>
           <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Solicitudes de Opersac por Estacion</h3>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={requestsData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis dataKey="station_name" stroke="var(--text-muted)" fontSize={10} interval={0} />
                 <YAxis stroke="var(--text-muted)" fontSize={11} />
-                <Tooltip />
+                <Tooltip
+                  contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                  cursor={{ fill: 'rgba(128,128,128,0.08)' }}
+                />
                 <Legend />
                 <Bar dataKey="pending" name="Pendientes" fill="#eab308" />
                 <Bar dataKey="approved" name="Aprobadas" fill="#22c55e" />
