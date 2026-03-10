@@ -13,29 +13,52 @@ interface CircuitFormProps {
   onCreated: () => void;
 }
 
+/**
+ * Formulario modal para crear un nuevo circuito en una barra dada.
+ * Incluye cálculo automático de MD, validación de fecha de reserva
+ * y configuración de barras secundaria/terciaria para circuitos UPS.
+ */
 export default function CircuitForm({ barId, bars, onClose, onCreated }: CircuitFormProps) {
   const [denomination, setDenomination] = useState('');
   const [name, setName] = useState('');
   const [status, setStatus] = useState('operative_normal');
+  // Fecha de vencimiento de la reserva; solo aplica cuando el estado es reserve_r o reserve_equipped_re
   const [reserveExpiresAt, setReserveExpiresAt] = useState('');
   const [localItem, setLocalItem] = useState('');
+  // Potencia instalada en kW (PI); junto con FD determina la MD
   const [piKw, setPiKw] = useState('');
+  // Factor de demanda (FD); valor por defecto 1.0 representa uso al 100%
   const [fd, setFd] = useState('1.0');
+  // Indica si el circuito está alimentado por un UPS (requiere dos barras de conexión)
   const [isUps, setIsUps] = useState(false);
+  // Barra secundaria de conexión UPS (Conexion 1)
   const [secondaryBarId, setSecondaryBarId] = useState<number | null>(null);
+  // Barra terciaria de conexión UPS (Conexion 2); no puede coincidir con la secundaria
   const [tertiaryBarId, setTertiaryBarId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Mensaje de advertencia del backend cuando la creación requiere confirmación forzada
   const [forceMessage, setForceMessage] = useState<string | null>(null);
+  // Payload guardado temporalmente mientras el usuario decide si confirmar la creación forzada
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
 
+  // Determina si el estado seleccionado corresponde a una reserva (excluye UPS, que no puede ser reserva)
   const isReserve = !isUps && (status === 'reserve_r' || status === 'reserve_equipped_re');
   const today = new Date().toISOString().split('T')[0];
 
+  // Cálculo automático de MD (Máxima Demanda) = PI × FD en tiempo real
+  // El campo MD es de solo lectura y se recalcula con cada cambio en PI o FD
   const mdKw = (parseFloat(piKw) || 0) * (parseFloat(fd) || 1);
+
+  // Barras disponibles para conexiones UPS: excluye la barra principal (barId)
   const otherBars = bars.filter((b) => b.id !== barId);
+  // La barra terciaria excluye además la que ya fue seleccionada como secundaria para evitar duplicados
   const tertiaryOptions = otherBars.filter((b) => b.id !== secondaryBarId);
 
+  /**
+   * Actualiza la barra secundaria y limpia la terciaria si coincidía con la nueva selección,
+   * garantizando que las dos conexiones UPS sean siempre barras distintas.
+   */
   const handleSecondaryChange = (id: number | null) => {
     setSecondaryBarId(id);
     if (id && tertiaryBarId === id) {
@@ -43,6 +66,11 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
     }
   };
 
+  /**
+   * Construye el payload para la API.
+   * reserve_expires_at solo se incluye si el circuito es de tipo reserva.
+   * secondary_bar_id y tertiary_bar_id solo se incluyen si el circuito es UPS.
+   */
   const buildPayload = () => ({
     denomination,
     name,
@@ -57,14 +85,17 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
   });
 
   const handleSubmit = async () => {
+    // Validación de campos obligatorios básicos
     if (!denomination || !name || !piKw) {
       setError('Complete los campos obligatorios');
       return;
     }
+    // Validación de fecha de expiración: obligatoria para circuitos en estado de reserva
     if (isReserve && !reserveExpiresAt) {
       setError('Debe indicar la fecha de vencimiento de la reserva');
       return;
     }
+    // Validación de conexiones UPS: ambas barras son requeridas cuando isUps es verdadero
     if (isUps && (!secondaryBarId || !tertiaryBarId)) {
       setError('UPS requiere seleccionar ambas barras de conexion');
       return;
@@ -79,6 +110,8 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
       onCreated();
     } catch (err: any) {
       const detail = err.response?.data?.detail;
+      // Si el backend requiere confirmación explícita (ej. superar capacidad del tablero),
+      // se guarda el payload y se muestra el modal de confirmación forzada
       if (detail?.requires_force) {
         setPendingPayload(payload);
         setForceMessage(detail.message);
@@ -90,6 +123,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
     }
   };
 
+  // Reintenta la creación con el flag force:true para confirmar explícitamente la advertencia del backend
   const handleForceConfirm = async () => {
     if (!pendingPayload) return;
     setIsSubmitting(true);
@@ -105,6 +139,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
     }
   };
 
+  // Cancela la creación forzada y descarta el payload pendiente
   const handleForceCancel = () => {
     setForceMessage(null);
     setPendingPayload(null);
@@ -121,6 +156,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Estado</label>
+              {/* Al cambiar el estado se limpia la fecha de reserva previa para evitar inconsistencias */}
               <select value={status} onChange={(e) => { setStatus(e.target.value); setReserveExpiresAt(''); }} className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]">
                 <option value="operative_normal">Operativo Normal</option>
                 <option value="reserve_r">Reserva (R)</option>
@@ -129,6 +165,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
             </div>
             <Input label="Local/ITEM" value={localItem} onChange={(e) => setLocalItem(e.target.value)} />
           </div>
+          {/* Campo de fecha de expiración: aparece condicionalmente solo para estados de reserva */}
           {isReserve && (
             <Input
               label="Reserva válida hasta *"
@@ -138,11 +175,13 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
               min={today}
             />
           )}
+          {/* Bloque de potencia: PI y FD son editables; MD se calcula automáticamente y es de solo lectura */}
           <div className="grid grid-cols-3 gap-4">
             <Input label="PI (kW) *" type="number" step="0.01" value={piKw} onChange={(e) => setPiKw(e.target.value)} />
             <Input label="F.D" type="number" step="0.0001" value={fd} onChange={(e) => setFd(e.target.value)} />
             <div>
               <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">MD (kW)</label>
+              {/* MD = PI × FD — campo de solo lectura, actualizado en tiempo real */}
               <div className="px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-primary)]">
                 {mdKw.toFixed(2)}
               </div>
@@ -152,10 +191,12 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
             <input type="checkbox" id="isUps" checked={isUps} onChange={(e) => setIsUps(e.target.checked)} className="rounded border-[var(--border-color)]" />
             <label htmlFor="isUps" className="text-sm text-[var(--text-secondary)]">Es UPS?</label>
           </div>
+          {/* Selectores de barras secundaria y terciaria: visibles solo cuando isUps está activo */}
           {isUps && otherBars.length > 0 && (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Conexion 1</label>
+                {/* Barra secundaria (primera conexión UPS); su cambio puede limpiar la terciaria */}
                 <select
                   value={secondaryBarId || ''}
                   onChange={(e) => handleSecondaryChange(e.target.value ? Number(e.target.value) : null)}
@@ -167,6 +208,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
               </div>
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Conexion 2</label>
+                {/* Barra terciaria (segunda conexión UPS); excluye la barra ya usada como secundaria */}
                 <select
                   value={tertiaryBarId || ''}
                   onChange={(e) => setTertiaryBarId(e.target.value ? Number(e.target.value) : null)}
@@ -188,6 +230,8 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
         </div>
       </Modal>
 
+      {/* Modal de confirmación forzada: aparece cuando el backend detecta una condición de advertencia
+          (ej. superar la capacidad instalada) y requiere que el usuario acepte explícitamente */}
       {forceMessage && (
         <Modal isOpen onClose={handleForceCancel} title="Confirmar accion" size="sm">
           <div className="space-y-4">

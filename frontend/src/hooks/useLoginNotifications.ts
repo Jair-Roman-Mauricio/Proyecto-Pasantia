@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../config/api';
 import type { ToastItem } from '../components/ui/LoginToast';
 
+/** Estructura cruda de una notificación del sistema devuelta por el backend. */
 interface NotificationRaw {
   id: number;
   type: string;
@@ -9,6 +10,7 @@ interface NotificationRaw {
   is_read: boolean;
 }
 
+/** Estructura cruda de una solicitud devuelta por el backend. */
 interface RequestRaw {
   id: number;
   status: string;
@@ -17,6 +19,25 @@ interface RequestRaw {
   updated_at: string;
 }
 
+/**
+ * Hook que consulta el backend al iniciar sesión y genera toasts de bienvenida
+ * con información relevante según el rol del usuario.
+ *
+ * - Para **administradores**: muestra solicitudes pendientes de aprobación y
+ *   notificaciones del sistema no leídas (máximo 3 toasts en total).
+ * - Para **operadores SAC**: muestra actualizaciones de estado de sus propias solicitudes
+ *   (aprobadas/rechazadas desde el último login) y un resumen de las que siguen pendientes.
+ *
+ * La consulta se ejecuta una sola vez por montaje gracias a la ref `fetched`.
+ *
+ * @param role   - Rol del usuario autenticado (`'admin'` u `'opersac'`). Si es `undefined`,
+ *                 el efecto no se ejecuta y no se generan notificaciones.
+ * @param userId - Identificador numérico del usuario. Se usa como sufijo de la clave en
+ *                 localStorage para que distintos operadores no compartan el mismo timestamp de corte.
+ * @returns Un objeto con:
+ *   - `toasts`  – arreglo de items de notificación listos para renderizar.
+ *   - `dismiss` – función para eliminar un toast por su `id`.
+ */
 export function useLoginNotifications(role: 'admin' | 'opersac' | undefined, userId?: number) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const fetched = useRef(false);
@@ -34,7 +55,7 @@ export function useLoginNotifications(role: 'admin' | 'opersac' | undefined, use
       ]).then(([notifRes, reqRes]) => {
         const items: ToastItem[] = [];
 
-        // Pending requests → navigates to Solicitudes
+        // Solicitudes pendientes → navega a la sección Solicitudes
         const pendingCount = reqRes.data.filter((r) => r.status === 'pending').length;
         if (pendingCount > 0) {
           items.push({
@@ -46,7 +67,7 @@ export function useLoginNotifications(role: 'admin' | 'opersac' | undefined, use
           });
         }
 
-        // Unread system notifications → navigates to Notificaciones
+        // Notificaciones del sistema no leídas → navega a Notificaciones
         const unread = notifRes.data.slice(0, 3 - items.length);
         for (const n of unread) {
           items.push({
@@ -61,12 +82,12 @@ export function useLoginNotifications(role: 'admin' | 'opersac' | undefined, use
         setToasts(items);
       });
     } else {
-      // Key per user so different opersac users don't share timestamps
+      // Clave por usuario para que distintos operadores no compartan timestamps
       const cutoffKey = `notif_cutoff_${userIdRef.current ?? 'opersac'}`;
       const stored = localStorage.getItem(cutoffKey);
       const cutoff = stored ? new Date(stored) : new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-      // Save current timestamp so next login only shows newer items
+      // Guarda el timestamp actual; el próximo login solo mostrará items más recientes
       localStorage.setItem(cutoffKey, new Date().toISOString());
 
       api
@@ -74,7 +95,7 @@ export function useLoginNotifications(role: 'admin' | 'opersac' | undefined, use
         .then(({ data }) => {
           const items: ToastItem[] = [];
 
-          // Approved/rejected after last check
+          // Solicitudes aprobadas/rechazadas desde la última revisión
           const recentUpdated = data.filter((r) => {
             if (r.status !== 'approved' && r.status !== 'rejected') return false;
             return new Date(r.updated_at) > cutoff;
@@ -93,7 +114,7 @@ export function useLoginNotifications(role: 'admin' | 'opersac' | undefined, use
             });
           }
 
-          // Own pending count
+          // Cantidad de solicitudes propias pendientes de revisión
           const myPending = data.filter((r) => r.status === 'pending').length;
           if (myPending > 0 && items.length < 3) {
             items.push({

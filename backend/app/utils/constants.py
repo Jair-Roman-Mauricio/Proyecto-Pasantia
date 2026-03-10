@@ -1,3 +1,6 @@
+# Lista de las 26 estaciones de la Línea 1 del Metro de Lima,
+# ordenadas de sur a norte (Villa El Salvador → Bayóvar).
+# Cada entrada define el código único, el nombre oficial y el índice de orden para visualización.
 STATIONS = [
     {"code": "E01", "name": "Villa El Salvador", "order_index": 1},
     {"code": "E02", "name": "Parque Industrial", "order_index": 2},
@@ -27,20 +30,26 @@ STATIONS = [
     {"code": "E26", "name": "Bayovar", "order_index": 26},
 ]
 
+# Tipos de barra eléctrica que se crean automáticamente en cada estación al iniciar.
+# Cada estación tiene exactamente una barra de cada tipo.
 BAR_TYPES = [
     {"name": "Barra Normal", "bar_type": "normal"},
     {"name": "Barra Emergencia", "bar_type": "emergency"},
     {"name": "Barra Continuidad", "bar_type": "continuity"},
 ]
 
+# Claves de permiso disponibles para usuarios con rol OPERSAC.
+# El admin gestiona cuáles están habilitadas por usuario en la tabla permissions.
 PERMISSION_FEATURES = [
-    "view_stations",
-    "view_circuits",
-    "send_requests",
-    "add_observations",
-    "view_reports",
+    "view_stations",    # Ver estaciones, barras y circuitos
+    "view_circuits",    # Ver detalles de circuitos y sub-circuitos
+    "send_requests",    # Enviar solicitudes de ampliación de carga
+    "add_observations", # Agregar observaciones técnicas a la infraestructura
+    "view_reports",     # Acceder a reportes y exportación Excel
 ]
 
+# Motivos predefinidos para justificar cambios de imagen en estaciones, barras o circuitos.
+# El usuario puede seleccionar uno de estos valores en el formulario o elegir "Otro".
 IMAGE_JUSTIFICATION_REASONS = [
     "Actualizacion de infraestructura",
     "Correccion de imagen",

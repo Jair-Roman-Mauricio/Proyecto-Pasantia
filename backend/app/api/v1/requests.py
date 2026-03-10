@@ -21,6 +21,12 @@ router = APIRouter(prefix="/requests", tags=["Requests"])
 
 
 def _enrich_request(req: Request, db: Session) -> RequestResponse:
+    """
+    Enriquece una instancia de Request con datos relacionados (nombre del solicitante,
+    nombre de la estación y nombre del circuito) que no están en el modelo base.
+
+    Retorna un RequestResponse listo para serializar en la respuesta HTTP.
+    """
     opersac = db.query(User).filter(User.id == req.opersac_user_id).first()
     station = db.query(Station).filter(Station.id == req.station_id).first()
     circuit = db.query(Circuit).filter(Circuit.id == req.circuit_id).first() if req.circuit_id else None
@@ -175,7 +181,7 @@ def approve_request(
     if req.status != "pending":
         raise HTTPException(status_code=400, detail="Solo se pueden aprobar solicitudes pendientes")
 
-    # Find the correct bar
+    # Buscar la barra correspondiente según el tipo indicado en la solicitud
     bar = (
         db.query(Bar)
         .filter(Bar.station_id == req.station_id, Bar.bar_type == req.bar_type)
@@ -184,11 +190,13 @@ def approve_request(
     if not bar:
         raise HTTPException(status_code=404, detail="Barra no encontrada para la estacion")
 
+    # Calcular la máxima demanda a partir de la carga solicitada y el factor de demanda
     md_kw = req.requested_load_kw * req.fd
 
     try:
+        # Determinar si se crea un nuevo circuito o un sub-circuito según si circuit_id está presente
         if req.circuit_id:
-            # Create sub-circuit on existing circuit
+            # Crear sub-circuito dentro del circuito existente indicado por la solicitud
             sub = SubCircuit(
                 circuit_id=req.circuit_id,
                 name=req.sub_circuit_name or f"Ampliacion Solicitud #{req.id}",
@@ -202,7 +210,7 @@ def approve_request(
             db.add(sub)
             created_entity = {"sub_circuit_created": True}
         else:
-            # Create new circuit on bar
+            # Crear nuevo circuito directamente en la barra de la estación
             circuit = Circuit(
                 bar_id=bar.id,
                 denomination=f"AMP-{req.id}",
@@ -217,6 +225,7 @@ def approve_request(
             db.add(circuit)
             created_entity = {"circuit_created": True}
 
+        # Marcar la solicitud como aprobada y registrar quién y cuándo la revisó
         req.status = "approved"
         req.reviewed_by = admin.id
         req.reviewed_at = datetime.now(timezone.utc)
@@ -230,7 +239,7 @@ def approve_request(
         db.rollback()
         raise HTTPException(status_code=503, detail="Error de conexion con la base de datos al aprobar la solicitud")
 
-    # Recalculate energy
+    # Recalcular la energía de la estación para reflejar la nueva carga aprobada
     calculator = EnergyCalculator(db)
     calculator.recalculate_station(req.station_id)
 

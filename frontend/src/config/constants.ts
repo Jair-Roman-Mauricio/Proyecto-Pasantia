@@ -1,3 +1,7 @@
+// ---------------------------------------------------------------------------
+// Catálogo de estaciones de la Línea 1 del Metro de Lima
+// orderIndex sigue la numeración oficial: 1 = Villa El Salvador, 26 = Bayovar
+// ---------------------------------------------------------------------------
 export const STATIONS = [
   { code: 'E01', name: 'Villa El Salvador', orderIndex: 1 },
   { code: 'E02', name: 'Parque Industrial', orderIndex: 2 },
@@ -27,19 +31,29 @@ export const STATIONS = [
   { code: 'E26', name: 'Bayovar', orderIndex: 26 },
 ];
 
+// ---------------------------------------------------------------------------
+// Tipos de barra eléctrica disponibles en cada estación
+// ---------------------------------------------------------------------------
 export const BAR_TYPES = [
   { name: 'Barra Normal', type: 'normal' },
   { name: 'Barra Emergencia', type: 'emergency' },
   { name: 'Barra Continuidad', type: 'continuity' },
 ];
 
+// ---------------------------------------------------------------------------
+// Colores de estado para circuitos eléctricos
+// Cada valor corresponde al campo `status` de la interfaz Circuit.
+// ---------------------------------------------------------------------------
 export const CIRCUIT_STATUS_COLORS: Record<string, string> = {
-  operative_normal: '#22c55e',
-  reserve_r: '#eab308',
-  reserve_equipped_re: '#3b82f6',
-  inactive: '#6b7280',
+  operative_normal: '#22c55e',   // verde — en servicio normal
+  reserve_r: '#eab308',          // amarillo — en reserva sin equipar
+  reserve_equipped_re: '#3b82f6', // azul — en reserva equipada
+  inactive: '#6b7280',           // gris — fuera de servicio
 };
 
+// ---------------------------------------------------------------------------
+// Etiquetas legibles para los estados de circuito (usadas en badges y filtros)
+// ---------------------------------------------------------------------------
 export const CIRCUIT_STATUS_LABELS: Record<string, string> = {
   operative_normal: 'Operativo Normal',
   reserve_r: 'Reserva (R)',
@@ -47,18 +61,33 @@ export const CIRCUIT_STATUS_LABELS: Record<string, string> = {
   inactive: 'Inactivo',
 };
 
+// ---------------------------------------------------------------------------
+// Colores de estado energético para estaciones
+// Refleja el campo `status` de la interfaz Station:
+//   'red'    → debe energía (potencia disponible negativa)
+//   'yellow' → menos del 20 % de potencia disponible
+//   'green'  → potencia suficiente
+// ---------------------------------------------------------------------------
 export const STATION_STATUS_COLORS: Record<string, string> = {
   red: '#ef4444',
   yellow: '#eab308',
   green: '#22c55e',
 };
 
+// ---------------------------------------------------------------------------
+// Colores de severidad para observaciones técnicas
+// Usados en badges y marcadores de la interfaz de observaciones.
+// ---------------------------------------------------------------------------
 export const OBSERVATION_SEVERITY_COLORS: Record<string, string> = {
-  urgent: '#ef4444',
-  warning: '#eab308',
-  recommendation: '#3b82f6',
+  urgent: '#ef4444',         // rojo — atención inmediata
+  warning: '#eab308',        // amarillo — advertencia
+  recommendation: '#3b82f6', // azul — sugerencia de mejora
 };
 
+// ---------------------------------------------------------------------------
+// Razones predefinidas para justificar la actualización de imágenes de estación
+// El usuario puede seleccionar una de estas opciones o elegir 'Otro'.
+// ---------------------------------------------------------------------------
 export const IMAGE_JUSTIFICATION_REASONS = [
   'Actualizacion de infraestructura',
   'Correccion de imagen',

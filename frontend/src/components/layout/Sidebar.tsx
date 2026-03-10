@@ -16,6 +16,10 @@ import { useAuth } from '../../context/AuthContext';
 import { useSidebar } from '../../context/SidebarContext';
 import { useEffect } from 'react';
 
+/**
+ * Opciones del menú para usuarios con rol 'admin'.
+ * Incluye todas las secciones del sistema sin restricciones de permiso.
+ */
 const adminOptions = [
   { id: 'map', label: 'Mapa de Linea 1', icon: Map },
   { id: 'notifications', label: 'Notificaciones', icon: Bell },
@@ -28,6 +32,11 @@ const adminOptions = [
   { id: 'guide', label: 'Guia de Uso', icon: BookOpen },
 ];
 
+/**
+ * Opciones del menú para usuarios con rol 'opersac'.
+ * Cada opción con `permission` solo se muestra si el usuario tiene ese permiso habilitado.
+ * Se filtra en tiempo de ejecución mediante `hasPermission` del contexto de autenticación.
+ */
 const allOpersacOptions = [
   { id: 'map', label: 'Mapa de Linea 1', icon: Map, permission: 'view_stations' },
   { id: 'requests', label: 'Mis Solicitudes', icon: FileText, permission: 'send_requests' },
@@ -35,15 +44,23 @@ const allOpersacOptions = [
   { id: 'guide', label: 'Guia de Uso', icon: BookOpen },
 ];
 
+/**
+ * Barra lateral de navegación principal de la aplicación.
+ * En mobile se muestra/oculta con una transición lateral; en desktop es estática.
+ * El contenido del menú varía según el rol del usuario y el modo de vista activo
+ * (los admins pueden alternar entre vista admin y vista opersac).
+ */
 export default function Sidebar() {
   const { user, hasPermission } = useAuth();
   const { activeOption, setActiveOption, viewMode, toggleViewMode, mobileOpen, closeMobile } = useSidebar();
   const navigate = useNavigate();
 
+  // Filtra las opciones de opersac según los permisos asignados al usuario actual
   const opersacOptions = allOpersacOptions.filter((opt) => !opt.permission || hasPermission(opt.permission));
+  // Selecciona el conjunto de opciones a mostrar según el rol y el modo de vista
   const options = viewMode === 'admin' && user?.role === 'admin' ? adminOptions : opersacOptions;
 
-  // Close sidebar on route change (mobile)
+  // Cierra el sidebar al cambiar de vista (solo móvil)
   useEffect(() => { closeMobile(); }, [activeOption]);
 
   return (

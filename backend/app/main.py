@@ -67,7 +67,7 @@ Estación → Barra (normal / emergencia / continuidad) → Circuito → Sub-cir
     ],
 )
 
-# CORS
+# ── Middleware CORS — permite peticiones desde el frontend según la configuración ──
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -85,18 +85,22 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Error interno del servidor. Intente nuevamente."},
     )
 
-# Include API routes
+# ── Registro del router principal con el prefijo de versión de la API ──
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.on_event("startup")
 def on_startup():
-    # Create tables if they don't exist (for development)
+    # ── Inicialización de base de datos ──
+    # Crear tablas si no existen (solo en entorno de desarrollo)
     Base.metadata.create_all(bind=engine)
+
+    # ── Seeding inicial — crea admin y estaciones si la BD está vacía ──
     _seed_initial_data()
 
     from app.services.notification_service import check_expiring_reserves
 
+    # ── Scheduler de notificaciones — verifica reservas próximas a vencer ──
     def run_reserve_check():
         db = SessionLocal()
         try:
@@ -127,7 +131,7 @@ def _seed_initial_data():
 
     db: Session = SessionLocal()
     try:
-        # Seed admin user if none exists
+        # Crear usuario admin por defecto si no existe ninguno en la BD
         admin = db.query(User).filter(User.role == "admin").first()
         if not admin:
             admin = User(
@@ -140,7 +144,7 @@ def _seed_initial_data():
             db.add(admin)
             db.commit()
 
-        # Seed stations if none exist
+        # Crear las 26 estaciones y sus 3 barras si la tabla está vacía
         count = db.query(Station).count()
         if count == 0:
             for station_data in STATIONS:
@@ -156,7 +160,7 @@ def _seed_initial_data():
                 db.add(station)
             db.commit()
 
-            # Seed 3 bars per station
+            # Crear las 3 barras (normal, emergencia, continuidad) para cada estación
             stations = db.query(Station).all()
             for station in stations:
                 for bar_data in BAR_TYPES:
@@ -165,8 +169,8 @@ def _seed_initial_data():
                         name=bar_data["name"],
                         bar_type=bar_data["bar_type"],
                         status="operative",
-                        capacity_kw=200,
-                        capacity_a=300,
+                        capacity_kw=200,   # Capacidad por defecto en kW
+                        capacity_a=300,    # Capacidad por defecto en amperios
                     )
                     db.add(bar)
             db.commit()

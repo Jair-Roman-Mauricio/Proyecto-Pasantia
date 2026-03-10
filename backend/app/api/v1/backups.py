@@ -34,6 +34,14 @@ router = APIRouter(prefix="/backups", tags=["Backups"])
 
 
 def _serialize_model(obj) -> dict:
+    """
+    Serializa una instancia de modelo SQLAlchemy a un diccionario JSON-serializable.
+
+    Convierte tipos especiales (datetime, Decimal) a sus representaciones
+    estándar en cadena o float para que el resultado sea compatible con json.dumps.
+
+    Retorna un dict con los valores de todas las columnas de la tabla.
+    """
     data = {}
     for col in obj.__table__.columns:
         val = getattr(obj, col.name)
@@ -159,7 +167,7 @@ def restore_backup(
     data = backup.backup_data
 
     try:
-        # Delete in reverse dependency order (children first)
+        # Eliminar en orden inverso de dependencias (hijos primero)
         db.query(Observation).delete()
         db.query(Notification).delete()
         db.query(Request).delete()
@@ -173,7 +181,7 @@ def restore_backup(
 
         db.flush()
 
-        # Restore in dependency order (parents first)
+        # Restaurar en orden de dependencias (padres primero)
         for s in data.get("stations", []):
             db.execute(Station.__table__.insert().values(**s))
 
@@ -201,12 +209,12 @@ def restore_backup(
 
         db.commit()
 
-        # Recalculate all station energies
+        # Recalcular energías de todas las estaciones
         calculator = EnergyCalculator(db)
         for station in db.query(Station).all():
             calculator.recalculate_station(station.id)
 
-        # Reset sequences so new inserts don't collide with restored IDs
+        # Reiniciar secuencias para que nuevas inserciones no colisionen con los IDs restaurados
         for tbl in ["stations", "bars", "circuits", "sub_circuits",
                      "observations", "notifications", "requests", "audit_logs"]:
             db.execute(text(
@@ -236,7 +244,7 @@ def _find_pgdump() -> str:
     path = shutil.which("pg_dump")
     if path:
         return path
-    # Fallback Windows
+    # Alternativa para Windows
     candidates = glob.glob(r"C:\Program Files\PostgreSQL\*\bin\pg_dump.exe")
     # Fallback Linux/Ubuntu
     candidates += glob.glob("/usr/lib/postgresql/*/bin/pg_dump")

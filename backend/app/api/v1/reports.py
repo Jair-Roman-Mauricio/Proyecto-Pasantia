@@ -37,7 +37,7 @@ def get_demand_evolution(
     stations = db.query(Station).order_by(Station.order_index).all()
 
     if not start_date and not end_date:
-        # No filter: return current station values
+        # Sin filtro de fecha: retornar los valores actuales almacenados en cada estación
         return [
             {
                 "station_id": station.id,
@@ -51,7 +51,8 @@ def get_demand_evolution(
             for station in stations
         ]
 
-    # With date filter: compute demand from circuits/sub-circuits created in the range
+    # Con filtro de fecha: calcular la demanda acumulada de circuitos y sub-circuitos
+    # creados dentro del rango indicado, para analizar el crecimiento de carga
     data = []
     for station in stations:
         bar_ids = [b.id for b in db.query(Bar.id).filter(Bar.station_id == station.id).all()]
@@ -153,7 +154,7 @@ def export_reports_excel(
 
     wb = Workbook()
 
-    # ── Sheet 1: Demanda Electrica ──
+    # ── Hoja 1: Demanda Eléctrica — tabla con capacidad, demanda y disponible por estación ──
     ws1 = wb.active
     ws1.title = "Demanda Electrica"
     ws1.append(["Estacion", "Codigo", "Capacidad (kW)", "Demanda Max (kW)", "Disponible (kW)"])
@@ -197,13 +198,13 @@ def export_reports_excel(
             demand = float(total_md)
             ws1.append([s.name, s.code, capacity, demand, capacity - demand])
 
-    # Adjust column widths
+    # Ajustar ancho de columnas para mejorar la legibilidad del Excel
     for col in range(1, 6):
         ws1.column_dimensions[get_column_letter(col)].width = 22
 
     num_stations = len(stations)
 
-    # Line chart for demand
+    # Gráfico de líneas: demanda actual vs capacidad instalada por estación
     if num_stations > 0:
         chart1 = XlLineChart()
         chart1.title = "Evolucion de Demanda Electrica"
@@ -221,7 +222,7 @@ def export_reports_excel(
         chart1.add_data(capacity_data, titles_from_data=True)
         chart1.set_categories(cats)
 
-        # Style: demand red, capacity green dashed
+        # Estilo de series: demanda en rojo sólido, capacidad en verde discontinuo
         s1 = chart1.series[0]
         s1.graphicalProperties.line.solidFill = "EF4444"
         s2 = chart1.series[1]
@@ -230,7 +231,7 @@ def export_reports_excel(
 
         ws1.add_chart(chart1, f"A{num_stations + 4}")
 
-    # ── Sheet 2: Solicitudes por Estacion ──
+    # ── Hoja 2: Solicitudes por Estación — tabla con conteos agrupados por estado ──
     ws2 = wb.create_sheet("Solicitudes por Estacion")
     ws2.append(["Estacion", "Pendientes", "Aprobadas", "Rechazadas", "Total"])
 
@@ -261,7 +262,7 @@ def export_reports_excel(
 
     num_req_rows = len(data)
 
-    # Bar chart for requests
+    # Gráfico de barras apiladas: solicitudes pendientes, aprobadas y rechazadas por estación
     if num_req_rows > 0:
         chart2 = XlBarChart()
         chart2.type = "col"
@@ -282,7 +283,7 @@ def export_reports_excel(
         chart2.add_data(rejected_ref, titles_from_data=True)
         chart2.set_categories(cats2)
 
-        # Colors: pending yellow, approved green, rejected red
+        # Colores de series: pendientes en amarillo, aprobadas en verde, rechazadas en rojo
         chart2.series[0].graphicalProperties.solidFill = "EAB308"
         chart2.series[1].graphicalProperties.solidFill = "22C55E"
         chart2.series[2].graphicalProperties.solidFill = "EF4444"

@@ -76,7 +76,7 @@ def create_circuit(
     if not bar:
         raise HTTPException(status_code=404, detail="Barra no encontrada")
 
-    # Auto-calculate MD if not provided
+    # Calcular MD automáticamente si no fue provista
     md_kw = data.md_kw if data.md_kw is not None else data.pi_kw * data.fd
 
     # Check capacity
@@ -94,7 +94,7 @@ def create_circuit(
                 },
             )
 
-    # Validate UPS
+    # Validar configuración UPS (requiere barra secundaria)
     if data.is_ups:
         if not data.secondary_bar_id or not data.tertiary_bar_id:
             raise HTTPException(
@@ -135,7 +135,7 @@ def create_circuit(
     safe_commit(db)
     db.refresh(circuit)
 
-    # Recalculate station energy
+    # Recalcular energía de la estación
     calculator.recalculate_station(bar.station_id)
 
     # Audit
@@ -193,7 +193,7 @@ def update_circuit(
     safe_commit(db)
     db.refresh(circuit)
 
-    # Recalculate station energy
+    # Recalcular energía de la estación
     bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
     calculator = EnergyCalculator(db)
     calculator.recalculate_station(bar.station_id)

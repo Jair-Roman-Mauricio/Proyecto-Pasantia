@@ -9,6 +9,12 @@ import Input from '../ui/Input';
 import Card from '../ui/Card';
 import Modal from '../ui/Modal';
 
+/**
+ * Tabla de auditoría del sistema.
+ * Permite filtrar los registros por fecha, acción, tipo de entidad y estado de marcado.
+ * Los registros pueden marcarse como destacados (starred) para revisión posterior.
+ * También permite exportar el historial completo a Excel.
+ */
 export default function AuditTable() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [startDate, setStartDate] = useState('');
@@ -17,7 +23,7 @@ export default function AuditTable() {
   const [entityFilter, setEntityFilter] = useState('');
   const [flaggedFilter, setFlaggedFilter] = useState('');
 
-  // Flag modal state
+  // Estado del modal de marcado
   const [flagTarget, setFlagTarget] = useState<AuditLog | null>(null);
   const [flagReason, setFlagReason] = useState('');
   const [flagLoading, setFlagLoading] = useState(false);
@@ -53,20 +59,20 @@ export default function AuditTable() {
 
   const hasFilters = startDate || endDate || actionFilter || entityFilter || flaggedFilter;
 
-  // Click star button
+  // Click en botón de marcar
   const handleFlagClick = async (log: AuditLog) => {
     if (log.is_flagged) {
-      // Un-flag directly, no reason needed
+      // Desmarcar directamente, sin necesidad de motivo
       await api.put(`/audit/${log.id}/flag`, { is_flagged: false, flag_reason: null });
       setLogs(prev => prev.map(l => l.id === log.id ? { ...l, is_flagged: false, flag_reason: null } : l));
     } else {
-      // Open modal to enter reason
+      // Abrir modal para ingresar el motivo
       setFlagTarget(log);
       setFlagReason('');
     }
   };
 
-  // Confirm flagging from modal
+  // Confirmar marcado desde el modal
   const handleConfirmFlag = async () => {
     if (!flagTarget || !flagReason.trim()) return;
     setFlagLoading(true);

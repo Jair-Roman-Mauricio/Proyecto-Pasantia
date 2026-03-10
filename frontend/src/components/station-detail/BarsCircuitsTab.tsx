@@ -23,27 +23,49 @@ interface BarsCircuitsTabProps {
   onStationChanged?: () => void;
 }
 
+/**
+ * Pestaña principal de tableros (barras) y circuitos de una estación.
+ * Muestra un árbol expandible en el panel izquierdo y el detalle en el derecho.
+ * Gestiona la selección de barra/circuito y coordina la apertura de modales.
+ */
 export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircuitsTabProps) {
   const { user, hasPermission } = useAuth();
   const { viewMode } = useSidebar();
+
+  // Lista de barras/tableros de la estación
   const [bars, setBars] = useState<Bar[]>([]);
+  // Conjunto de IDs de barras con el árbol expandido en el panel izquierdo
   const [expandedBars, setExpandedBars] = useState<Set<number>>(new Set());
+  // Mapa de barraId → lista de circuitos cargados para esa barra
   const [barCircuits, setBarCircuits] = useState<Record<number, Circuit[]>>({});
+  // Barra actualmente seleccionada para mostrar su detalle en el panel derecho
   const [selectedBar, setSelectedBar] = useState<Bar | null>(null);
+  // Circuito actualmente seleccionado; al seleccionarlo se muestra la tabla de sub-circuitos
   const [selectedCircuit, setSelectedCircuit] = useState<Circuit | null>(null);
+  // Resumen de potencia (PI/MD/capacidad) de la barra seleccionada
   const [powerSummary, setPowerSummary] = useState<BarPowerSummary | null>(null);
+  // Activa/desactiva el modo edición que habilita botones de cambio de estado y eliminación
   const [isEditMode, setIsEditMode] = useState(false);
+  // Controla la visibilidad del modal de creación de nuevo circuito
   const [showCircuitForm, setShowCircuitForm] = useState(false);
+  // Controla la visibilidad del modal de observaciones (barra o circuito)
   const [showObservations, setShowObservations] = useState(false);
+  // Controla la visibilidad del modal de cambio de estado (circuitos o sub-circuitos)
   const [showStatusChange, setShowStatusChange] = useState(false);
+  // Lista de sub-circuitos del circuito seleccionado
   const [subCircuits, setSubCircuits] = useState<SubCircuit[]>([]);
+  // Controla la visibilidad del modal de creación de nuevo sub-circuito
   const [showSubCircuitForm, setShowSubCircuitForm] = useState(false);
+  // ID de la barra para la que se está creando un circuito (se pasa al modal CircuitForm)
   const [formBarId, setFormBarId] = useState<number | null>(null);
+  // Indica si la carga inicial de barras está en progreso
   const [isLoading, setIsLoading] = useState(true);
 
+  // Solo los admins en modo admin pueden crear/editar; los opersac solo visualizan
   const isAdmin = user?.role === 'admin' && viewMode === 'admin';
   const canViewCircuits = hasPermission('view_circuits');
 
+  // Carga las barras de la estación al montar el componente y expande la primera por defecto
   useEffect(() => {
     stationService.getBars(station.id).then((data) => {
       setBars(data);
@@ -54,6 +76,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
     }).catch(console.error).finally(() => setIsLoading(false));
   }, [station.id]);
 
+  // Al cambiar la barra seleccionada, carga sus circuitos y el resumen de potencia
   useEffect(() => {
     if (selectedBar) {
       if (canViewCircuits) {
@@ -65,6 +88,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
     }
   }, [selectedBar, canViewCircuits]);
 
+  // Al seleccionar un circuito, carga sus sub-circuitos; al deseleccionar, limpia la lista
   useEffect(() => {
     if (selectedCircuit) {
       circuitService.getSubCircuits(selectedCircuit.id).then(setSubCircuits).catch(() => setSubCircuits([]));
@@ -73,6 +97,10 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
     }
   }, [selectedCircuit]);
 
+  /**
+   * Recarga los sub-circuitos, el resumen de potencia y los circuitos de la barra
+   * después de cualquier cambio en sub-circuitos (creación, edición o eliminación).
+   */
   const refreshAfterSubCircuitChange = () => {
     if (selectedCircuit) {
       circuitService.getSubCircuits(selectedCircuit.id).then(setSubCircuits);
@@ -84,6 +112,10 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
     onStationChanged?.();
   };
 
+  /**
+   * Alterna la expansión de una barra en el árbol del panel izquierdo.
+   * Si la barra ya está expandida la colapsa, y viceversa.
+   */
   const toggleBar = (barId: number) => {
     setExpandedBars((prev) => {
       const next = new Set(prev);
@@ -92,18 +124,24 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
     });
   };
 
+  /**
+   * Solicita al servicio los circuitos de una barra específica y actualiza el mapa barCircuits.
+   * Se llama tras crear o eliminar un circuito para refrescar la lista sin recargar toda la página.
+   */
   const loadBarCircuits = (barId: number) => {
     circuitService.getByBar(barId).then((circuits) => {
       setBarCircuits((prev) => ({ ...prev, [barId]: circuits }));
     });
   };
 
+  // Cambia la barra seleccionada y limpia el circuito y el modo edición activos
   const handleBarSelect = (bar: Bar) => {
     setSelectedBar(bar);
     setSelectedCircuit(null);
     setIsEditMode(false);
   };
 
+  // Callback tras crear un circuito: cierra el modal, recarga circuitos y resumen de potencia
   const handleCircuitCreated = () => {
     setShowCircuitForm(false);
     if (formBarId) loadBarCircuits(formBarId);
@@ -111,6 +149,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
     onStationChanged?.();
   };
 
+  // Callback tras eliminar un circuito: recarga circuitos y resumen de potencia de la barra activa
   const handleCircuitDeleted = () => {
     if (selectedBar) {
       loadBarCircuits(selectedBar.id);
@@ -123,13 +162,14 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
 
   return (
     <div className="flex flex-col md:flex-row gap-4">
-      {/* Left panel - Tree */}
+      {/* Panel izquierdo: árbol de tableros y sus circuitos */}
       <div className="w-full md:w-64 md:shrink-0">
         <Card className="sticky top-0">
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Tableros</h3>
           <div className="space-y-1">
             {bars.map((bar) => (
               <div key={bar.id}>
+                {/* Fila de barra: botón para expandir/colapsar y botón para agregar circuito (solo admin) */}
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => { toggleBar(bar.id); handleBarSelect(bar); }}
@@ -146,6 +186,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
                     </button>
                   )}
                 </div>
+                {/* Lista de circuitos de la barra, visible solo si la barra está expandida y el usuario tiene permiso */}
                 {canViewCircuits && expandedBars.has(bar.id) && barCircuits[bar.id] && (
                   <div className="ml-6 mt-1 space-y-0.5">
                     {barCircuits[bar.id].map((circuit) => (
@@ -157,6 +198,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
                         }`}
                       >
                         <span className="flex items-center gap-1.5">
+                          {/* Indicador de color según el estado del circuito (constantes globales) */}
                           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CIRCUIT_STATUS_COLORS[circuit.status] }} />
                           <span className="truncate">{circuit.name}</span>
                         </span>
@@ -173,8 +215,9 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
         </Card>
       </div>
 
-      {/* Right panel */}
+      {/* Panel derecho: detalle de la barra o circuito seleccionado */}
       <div className="flex-1 min-w-0">
+        {/* Si el circuito está en estado de reserva, muestra un mensaje de espera en lugar del detalle */}
         {selectedCircuit && (selectedCircuit.status === 'reserve_r' || selectedCircuit.status === 'reserve_equipped_re') ? (
           <Card>
             <div className="text-center py-12">
@@ -184,6 +227,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
           </Card>
         ) : selectedBar ? (
           <div className="space-y-4">
+            {/* Encabezado con nombre de estación/barra/circuito, estado y botones de acción */}
             <div className="flex flex-wrap items-start gap-2 justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -199,9 +243,11 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
                     <Plus size={14} className="mr-1" /> Agregar Sub-circuito
                   </Button>
                 )}
+                {/* Botón para entrar al modo edición (solo admin) */}
                 {isAdmin && !isEditMode && (
                   <Button variant="secondary" size="sm" onClick={() => setIsEditMode(true)}>Modo Edicion</Button>
                 )}
+                {/* En modo edición se habilitan Cambiar Estado y Salir Edicion */}
                 {isEditMode && (
                   <>
                     <Button variant="secondary" size="sm" onClick={() => setShowStatusChange(true)}>Cambiar Estado</Button>
@@ -212,9 +258,11 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
               </div>
             </div>
 
+            {/* Tarjetas de resumen de potencia (PI, MD, capacidad disponible) */}
             {powerSummary && <PowerCards summary={powerSummary} />}
 
             {canViewCircuits && (
+              // Si hay un circuito seleccionado muestra sus sub-circuitos; si no, muestra los circuitos de la barra
               selectedCircuit ? (
                 <SubCircuitTable
                   subCircuits={subCircuits}
@@ -241,16 +289,21 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
         )}
       </div>
 
-      {/* Modals */}
+      {/* Modales — se montan solo cuando su bandera de visibilidad es true */}
+
+      {/* Modal de creación de circuito: recibe el ID de la barra para la que se crea */}
       {showCircuitForm && formBarId && (
         <CircuitForm barId={formBarId} bars={bars} onClose={() => setShowCircuitForm(false)} onCreated={handleCircuitCreated} />
       )}
+      {/* Modal de creación de sub-circuito: requiere un circuito seleccionado */}
       {showSubCircuitForm && selectedCircuit && (
         <SubCircuitForm circuitId={selectedCircuit.id} onClose={() => setShowSubCircuitForm(false)} onCreated={() => { setShowSubCircuitForm(false); refreshAfterSubCircuitChange(); }} />
       )}
+      {/* Modal de observaciones: puede recibir barId, circuitId o ambos según el contexto */}
       {showObservations && (selectedBar || selectedCircuit) && (
         <ObservationsModal barId={selectedBar?.id} circuitId={selectedCircuit?.id} onClose={() => setShowObservations(false)} />
       )}
+      {/* Modal de cambio de estado: opera en modo "circuits" (sobre la barra) o "sub-circuits" (sobre el circuito) */}
       {showStatusChange && selectedBar && (
         selectedCircuit ? (
           <StatusChangeModal

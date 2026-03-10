@@ -4,18 +4,23 @@ import type { Station } from '../../types';
 import StationModal from './StationModal';
 import Spinner from '../ui/Spinner';
 
+/** Dirección en la que se renderiza la etiqueta de nombre respecto al nodo de estación */
 type LabelDir = 'top' | 'bottom' | 'left' | 'right' | 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
 
+/**
+ * Coordenadas SVG de una estación dentro del viewBox del mapa y
+ * la dirección preferida de su etiqueta de nombre.
+ */
 interface StationPos {
   x: number;
   y: number;
   labelDir: LabelDir;
 }
 
-// Positions ordered from Bayovar (top-left) to Villa El Salvador (right)
-// The API returns stations by order_index (1=VES, 26=Bayovar), we reverse for display
+// Posiciones ordenadas de Bayovar (izquierda) a Villa El Salvador (derecha)
+// La API retorna por order_index (1=VES, 26=Bayovar); se invierte para el display
 const STATION_POSITIONS: StationPos[] = [
-  // SJL zone - steep zigzag descending
+  // Zona SJL — zigzag pronunciado descendente
   { x: 35,   y: 48,  labelDir: 'top' },             // 0: Bayovar (L1)
   { x: 82,   y: 130, labelDir: 'left' },           // 1: Santa Rosa
   { x: 145,  y: 78,  labelDir: 'top' },            // 2: San Martin
@@ -23,31 +28,32 @@ const STATION_POSITIONS: StationPos[] = [
   { x: 228,  y: 158, labelDir: 'top-right' },      // 4: Los Postes
   { x: 265,  y: 270, labelDir: 'left' },           // 5: Los Jardines
   { x: 322,  y: 222, labelDir: 'top-right' },      // 6: Piramide del Sol
-  // La Victoria zone
+  // Zona La Victoria
   { x: 368,  y: 340, labelDir: 'left' },           // 7: Caja de Agua
   { x: 418,  y: 300, labelDir: 'top-right' },      // 8: Presbitero Maestro
   { x: 442,  y: 400, labelDir: 'left' },           // 9: El Angel
   { x: 485,  y: 350, labelDir: 'top' },            // 10: Miguel Grau
   { x: 525,  y: 435, labelDir: 'bottom' },         // 11: Gamarra
-  // Central zone
+  // Zona Central
   { x: 575,  y: 382, labelDir: 'top' },            // 12: Arriola
   { x: 622,  y: 448, labelDir: 'bottom' },         // 13: La Cultura
   { x: 670,  y: 395, labelDir: 'top' },            // 14: San Borja Sur
   { x: 705,  y: 452, labelDir: 'bottom' },         // 15: Angamos
   { x: 752,  y: 365, labelDir: 'top' },            // 16: Cabitos
   { x: 795,  y: 418, labelDir: 'bottom' },         // 17: Ayacucho
-  // SJM zone - trending upward
+  // Zona SJM — tendencia ascendente hacia el sur
   { x: 842,  y: 338, labelDir: 'top' },            // 18: Jorge Chavez
   { x: 875,  y: 385, labelDir: 'bottom-right' },   // 19: Atocongo
   { x: 932,  y: 290, labelDir: 'top' },            // 20: San Juan
   { x: 955,  y: 340, labelDir: 'bottom' },         // 21: Maria Auxiliadora
-  // VES zone - final stretch
+  // Zona VES — tramo final de la línea
   { x: 1010, y: 265, labelDir: 'top' },            // 22: Villa Maria
   { x: 1042, y: 315, labelDir: 'bottom' },         // 23: Pumacahua
   { x: 1132, y: 240, labelDir: 'top' },            // 24: Parque Industrial
   { x: 1192, y: 310, labelDir: 'right' },          // 25: Villa El Salvador (L1)
 ];
 
+/** Etiquetas de distrito mostradas como texto de fondo tenue en el SVG */
 const DISTRICTS = [
   { text: 'LIMA', x: 200, y: 95 },
   { text: 'LA VICTORIA', x: 520, y: 260 },
@@ -55,14 +61,25 @@ const DISTRICTS = [
   { text: 'VILLA EL SALVADOR', x: 1120, y: 180 },
 ];
 
+/**
+ * Colores hexadecimales para cada estado de energía de la estación.
+ * Usados tanto en la vista mobile como en el SVG desktop.
+ */
 const STATUS_COLORS: Record<string, string> = {
   green: '#22C55E',
   yellow: '#F59E0B',
   red: '#EF4444',
 };
 
+/** Alias para la propiedad textAnchor de SVG */
 type Anchor = 'middle' | 'start' | 'end';
 
+/**
+ * Calcula la posición y el anclaje del texto de la etiqueta de estación
+ * a partir de la dirección configurada en {@link StationPos.labelDir}.
+ * @param pos - Posición SVG y dirección de la etiqueta.
+ * @returns Coordenadas x/y y valor de textAnchor para el elemento `<text>`.
+ */
 function getLabelPos(pos: StationPos): { x: number; y: number; anchor: Anchor } {
   const off = 16;
   switch (pos.labelDir) {
@@ -78,12 +95,19 @@ function getLabelPos(pos: StationPos): { x: number; y: number; anchor: Anchor } 
   }
 }
 
+/**
+ * Mapa interactivo de la Línea 1 del Metro de Lima.
+ * Muestra las 26 estaciones con su estado de energía actual.
+ * - Vista mobile: lista vertical con indicadores de color.
+ * - Vista desktop: diagrama SVG con posiciones aproximadas reales.
+ */
 export default function StationMap() {
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Carga inicial de estaciones desde la API
   useEffect(() => {
     stationService
       .getAll()
@@ -100,8 +124,8 @@ export default function StationMap() {
     );
   }
 
-  // API returns stations by order_index ascending (1=VES ... 26=Bayovar)
-  // Reverse so index 0 = Bayovar (left) and index 25 = VES (right)
+  // La API retorna order_index ascendente (1=VES … 26=Bayovar);
+  // se invierte para que índice 0 = Bayovar (izquierda) e índice 25 = VES (derecha)
   const displayStations = [...stations].reverse();
   const pathPoints = STATION_POSITIONS.map(p => `${p.x},${p.y}`).join(' ');
 
@@ -154,7 +178,7 @@ export default function StationMap() {
           className="w-full min-w-[800px]"
           style={{ minHeight: '420px' }}
         >
-          {/* District labels (faded background text) */}
+          {/* Etiquetas de distritos (texto de fondo atenuado) */}
           {DISTRICTS.map((d, i) => (
             <text
               key={i}
@@ -171,7 +195,7 @@ export default function StationMap() {
             </text>
           ))}
 
-          {/* Green connection line */}
+          {/* Línea de conexión entre estaciones */}
           <polyline
             points={pathPoints}
             fill="none"
@@ -207,7 +231,7 @@ export default function StationMap() {
             L1
           </text>
 
-          {/* Station nodes and labels */}
+          {/* Nodos de estación y etiquetas */}
           {displayStations.map((station, index) => {
             if (index >= STATION_POSITIONS.length) return null;
             const pos = STATION_POSITIONS[index];
@@ -225,10 +249,10 @@ export default function StationMap() {
                 onMouseEnter={() => setHoveredIndex(index)}
                 onMouseLeave={() => setHoveredIndex(null)}
               >
-                {/* Invisible hit area */}
+                {/* Área de clic invisible (amplía el área interactiva) */}
                 <circle cx={pos.x} cy={pos.y} r="22" fill="transparent" />
 
-                {/* Station dot (skip for L1 endpoints) */}
+                {/* Punto de estación (se omite para los extremos L1) */}
                 {!isEndpoint && (
                   <>
                     {isHovered && (
@@ -251,7 +275,7 @@ export default function StationMap() {
                   </>
                 )}
 
-                {/* Station name */}
+                {/* Nombre de la estación */}
                 <text
                   x={label.x}
                   y={label.y}
