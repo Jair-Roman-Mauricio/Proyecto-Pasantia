@@ -129,7 +129,7 @@ export default function StationMap() {
                   className="relative flex items-center gap-3 w-full text-left py-1.5 px-1 hover:bg-[var(--hover-bg)] rounded-lg transition-colors cursor-pointer"
                 >
                   {isEndpoint ? (
-                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center shrink-0 z-10">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 z-10" style={{ backgroundColor: color }}>
                       <span className="text-white font-bold" style={{ fontSize: '9px' }}>L1</span>
                     </div>
                   ) : (
@@ -182,7 +182,7 @@ export default function StationMap() {
           />
 
           {/* L1 badge - Bayovar (start) */}
-          <circle cx={STATION_POSITIONS[0].x} cy={STATION_POSITIONS[0].y} r="20" fill="#22C55E" />
+          <circle cx={STATION_POSITIONS[0].x} cy={STATION_POSITIONS[0].y} r="20" fill={STATUS_COLORS[displayStations[0]?.status] || '#22C55E'} />
           <text
             x={STATION_POSITIONS[0].x}
             y={STATION_POSITIONS[0].y + 6}
@@ -195,7 +195,7 @@ export default function StationMap() {
           </text>
 
           {/* L1 badge - Villa El Salvador (end) */}
-          <circle cx={STATION_POSITIONS[25].x} cy={STATION_POSITIONS[25].y} r="20" fill="#22C55E" />
+          <circle cx={STATION_POSITIONS[25].x} cy={STATION_POSITIONS[25].y} r="20" fill={STATUS_COLORS[displayStations[25]?.status] || '#22C55E'} />
           <text
             x={STATION_POSITIONS[25].x}
             y={STATION_POSITIONS[25].y + 6}

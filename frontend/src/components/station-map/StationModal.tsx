@@ -62,7 +62,7 @@ export default function StationModal({ station, onClose }: StationModalProps) {
             Maxima Demanda vs Potencia Disponible
           </h4>
           <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={192}>
               <PieChart>
                 <Pie
                   data={chartData}

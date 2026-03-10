@@ -82,7 +82,7 @@ export interface SubCircuit {
   circuit_id: number;
   name: string;
   description: string | null;
-  itm: string | null;
+  itm: string | null; 
   mm2: string | null;
   pi_kw: number;
   fd: number;

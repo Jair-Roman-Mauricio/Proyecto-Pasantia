@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Download, Filter } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
 import api from '../../config/api';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
@@ -11,6 +11,7 @@ export default function ReportsView() {
   const [requestsData, setRequestsData] = useState<any[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
 
   const loadData = (start?: string, end?: string) => {
     const params: Record<string, string> = {};
@@ -23,6 +24,25 @@ export default function ReportsView() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Auto-select first station when data loads
+  useEffect(() => {
+    if (demandData.length > 0 && selectedStationId === null) {
+      setSelectedStationId(demandData[0].station_id);
+    }
+  }, [demandData, selectedStationId]);
+
+  const stationData = useMemo(() => {
+    return demandData.find((d) => d.station_id === selectedStationId) ?? demandData[0] ?? null;
+  }, [demandData, selectedStationId]);
+
+  const stationChartData = useMemo(() => {
+    if (!stationData) return [];
+    return [
+      { name: 'Demanda Actual', value: Number(stationData.max_demand_kw), fill: '#ef4444' },
+      { name: 'Energia Disponible', value: Math.max(0, Number(stationData.available_power_kw)), fill: '#22c55e' },
+    ];
+  }, [stationData]);
 
   const handleFilter = () => {
     loadData(startDate || undefined, endDate || undefined);
@@ -87,26 +107,64 @@ export default function ReportsView() {
       </Card>
 
       <div className="grid grid-cols-1 gap-6 mt-6">
+        {/* Grafico 1: Demanda por estacion */}
         <Card>
-          <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Evolucion de Demanda Electrica (kW)</h3>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <h3 className="text-sm font-medium text-[var(--text-secondary)]">
+              Demanda vs Energia Disponible (kW)
+            </h3>
+            <select
+              value={selectedStationId ?? ''}
+              onChange={(e) => setSelectedStationId(Number(e.target.value))}
+              className="text-sm px-3 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] cursor-pointer"
+            >
+              {demandData.map((d) => (
+                <option key={d.station_id} value={d.station_id}>
+                  {d.station_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {stationData && (
+            <div className="flex gap-6 text-xs text-[var(--text-muted)] mb-3">
+              <span>Capacidad total: <strong className="text-[var(--text-primary)]">{Number(stationData.transformer_capacity_kw).toFixed(1)} kW</strong></span>
+              <span>Estado: <strong className={stationData.status === 'green' ? 'text-green-500' : stationData.status === 'yellow' ? 'text-yellow-500' : 'text-red-500'}>
+                {stationData.status === 'green' ? 'Energia suficiente' : stationData.status === 'yellow' ? 'Menos del 20% disponible' : 'Debe energia'}
+              </strong></span>
+            </div>
+          )}
+
           <div className="h-80">
             <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={demandData}>
+              <BarChart data={stationChartData} barCategoryGap="40%">
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="station_code" stroke="var(--text-muted)" fontSize={11} />
-                <YAxis stroke="var(--text-muted)" fontSize={11} />
+                <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} />
+                <YAxis stroke="var(--text-muted)" fontSize={11} unit=" kW" />
                 <Tooltip
+                  formatter={(value: number) => [`${value.toFixed(1)} kW`]}
                   contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                   cursor={{ fill: 'rgba(128,128,128,0.08)' }}
                 />
-                <Legend />
-                <Line type="monotone" dataKey="max_demand_kw" name="Demanda Real" stroke="#ef4444" strokeWidth={2} />
-                <Line type="monotone" dataKey="transformer_capacity_kw" name="Capacidad Maxima" stroke="#22c55e" strokeWidth={2} strokeDasharray="5 5" />
-              </LineChart>
+                {stationData && (
+                  <ReferenceLine
+                    y={Number(stationData.transformer_capacity_kw)}
+                    stroke="#6b7280"
+                    strokeDasharray="6 3"
+                    label={{ value: 'Cap. Max', position: 'insideTopRight', fontSize: 10, fill: 'var(--text-muted)' }}
+                  />
+                )}
+                <Bar dataKey="value" name="kW" radius={[4, 4, 0, 0]}>
+                  {stationChartData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
+        {/* Grafico 2: Solicitudes por estacion */}
         <Card>
           <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Solicitudes de Opersac por Estacion</h3>
           <div className="h-80">

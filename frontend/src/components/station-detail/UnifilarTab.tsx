@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Upload } from 'lucide-react';
 import type { Station } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -18,7 +18,25 @@ export default function UnifilarTab({ station }: UnifilarTabProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [justification, setJustification] = useState('');
   const [imageKey, setImageKey] = useState(0);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const prevBlobUrl = useRef<string | null>(null);
   const isAdmin = user?.role === 'admin';
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`/images/unifilar/${station.id}`, { responseType: 'blob' })
+      .then((res) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(res.data);
+        if (prevBlobUrl.current) URL.revokeObjectURL(prevBlobUrl.current);
+        prevBlobUrl.current = url;
+        setBlobUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setBlobUrl(null);
+      });
+    return () => { cancelled = true; };
+  }, [station.id, imageKey]);
 
   const handleUpload = async () => {
     if (!selectedFile || !justification) return;
@@ -54,18 +72,17 @@ export default function UnifilarTab({ station }: UnifilarTabProps) {
 
       <Card>
         <div className="min-h-[400px] flex items-center justify-center">
-          <img
-            key={imageKey}
-            src={`/api/v1/images/unifilar/${station.id}?v=${imageKey}`}
-            alt={`Mapa unifilar - ${station.name}`}
-            className="max-w-full max-h-[600px] object-contain"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-          <p className="text-[var(--text-muted)]">
-            No hay mapa unifilar disponible para esta estacion
-          </p>
+          {blobUrl ? (
+            <img
+              src={blobUrl}
+              alt={`Mapa unifilar - ${station.name}`}
+              className="max-w-full max-h-[600px] object-contain"
+            />
+          ) : (
+            <p className="text-[var(--text-muted)]">
+              No hay mapa unifilar disponible para esta estacion
+            </p>
+          )}
         </div>
       </Card>
 

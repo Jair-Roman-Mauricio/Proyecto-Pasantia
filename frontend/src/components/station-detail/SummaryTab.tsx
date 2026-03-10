@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Upload, Camera } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import type { Station } from '../../types';
@@ -21,7 +21,24 @@ export default function SummaryTab({ station }: SummaryTabProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [justification, setJustification] = useState('');
   const [imageKey, setImageKey] = useState(0);
-  const [hasImage, setHasImage] = useState(true);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const prevBlobUrl = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`/images/transformer/${station.id}`, { responseType: 'blob' })
+      .then((res) => {
+        if (cancelled) return;
+        if (prevBlobUrl.current) URL.revokeObjectURL(prevBlobUrl.current);
+        const url = URL.createObjectURL(res.data);
+        prevBlobUrl.current = url;
+        setBlobUrl(url);
+      })
+      .catch(() => { if (!cancelled) setBlobUrl(null); });
+    return () => {
+      cancelled = true;
+    };
+  }, [station.id, imageKey]);
 
   const consumed = Number(station.max_demand_kw);
   const available = Math.max(0, Number(station.available_power_kw));
@@ -44,7 +61,6 @@ export default function SummaryTab({ station }: SummaryTabProps) {
       setShowUpload(false);
       setSelectedFile(null);
       setJustification('');
-      setHasImage(true);
       setImageKey((k) => k + 1);
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -61,19 +77,17 @@ export default function SummaryTab({ station }: SummaryTabProps) {
           {isAdmin && (
             <Button variant="secondary" size="sm" onClick={() => setShowUpload(true)}>
               <Upload size={14} className="mr-1" />
-              {hasImage ? 'Cambiar Foto' : 'Subir Foto'}
+              {blobUrl ? 'Cambiar Foto' : 'Subir Foto'}
             </Button>
           )}
         </div>
 
         <div className="aspect-video bg-[var(--bg-secondary)] rounded-lg flex items-center justify-center overflow-hidden">
-          {hasImage ? (
+          {blobUrl ? (
             <img
-              key={imageKey}
-              src={`/api/v1/images/transformer/${station.id}?v=${imageKey}`}
+              src={blobUrl}
               alt={`Transformador - ${station.name}`}
               className="max-h-full max-w-full object-contain rounded-lg"
-              onError={() => setHasImage(false)}
             />
           ) : (
             <div
@@ -95,7 +109,7 @@ export default function SummaryTab({ station }: SummaryTabProps) {
           Potencia Disponible vs Consumida
         </h3>
         <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={256}>
             <PieChart>
               <Pie
                 data={chartData}

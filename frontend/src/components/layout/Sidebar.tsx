@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Eye,
   X,
+  BookOpen,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -24,12 +25,14 @@ const adminOptions = [
   { id: 'users', label: 'Gestion de Usuarios', icon: Users },
   { id: 'backup', label: 'Backup', icon: Database },
   { id: 'audit', label: 'Auditoria', icon: ClipboardList },
+  { id: 'guide', label: 'Guia de Uso', icon: BookOpen },
 ];
 
 const allOpersacOptions = [
   { id: 'map', label: 'Mapa de Linea 1', icon: Map, permission: 'view_stations' },
   { id: 'requests', label: 'Mis Solicitudes', icon: FileText, permission: 'send_requests' },
   { id: 'reports', label: 'Reportes', icon: BarChart3, permission: 'view_reports' },
+  { id: 'guide', label: 'Guia de Uso', icon: BookOpen },
 ];
 
 export default function Sidebar() {
@@ -37,7 +40,7 @@ export default function Sidebar() {
   const { activeOption, setActiveOption, viewMode, toggleViewMode, mobileOpen, closeMobile } = useSidebar();
   const navigate = useNavigate();
 
-  const opersacOptions = allOpersacOptions.filter((opt) => hasPermission(opt.permission));
+  const opersacOptions = allOpersacOptions.filter((opt) => !opt.permission || hasPermission(opt.permission));
   const options = viewMode === 'admin' && user?.role === 'admin' ? adminOptions : opersacOptions;
 
   // Close sidebar on route change (mobile)

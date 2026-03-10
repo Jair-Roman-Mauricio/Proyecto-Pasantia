@@ -1,4 +1,7 @@
+import { useCallback } from 'react';
 import { useSidebar } from '../context/SidebarContext';
+import { useAuth } from '../context/AuthContext';
+import { useLoginNotifications } from '../hooks/useLoginNotifications';
 import StationMap from '../components/station-map/StationMap';
 import NotificationList from '../components/notifications/NotificationList';
 import RequestTable from '../components/requests/RequestTable';
@@ -7,9 +10,17 @@ import PermissionsManager from '../components/permissions/PermissionsManager';
 import UserTable from '../components/users/UserTable';
 import BackupHistory from '../components/backup/BackupHistory';
 import AuditTable from '../components/audit/AuditTable';
+import GuideView from '../components/guide/GuideView';
+import LoginToast, { type ToastItem } from '../components/ui/LoginToast';
 
 export default function DashboardPage() {
-  const { activeOption } = useSidebar();
+  const { activeOption, setActiveOption } = useSidebar();
+  const { user } = useAuth();
+  const { toasts, dismiss } = useLoginNotifications(user?.role as 'admin' | 'opersac' | undefined, user?.id);
+
+  const handleToastClick = useCallback((toast: ToastItem) => {
+    setActiveOption(toast.navigateTo);
+  }, [setActiveOption]);
 
   const renderContent = () => {
     switch (activeOption) {
@@ -29,10 +40,17 @@ export default function DashboardPage() {
         return <BackupHistory />;
       case 'audit':
         return <AuditTable />;
+      case 'guide':
+        return <GuideView />;
       default:
         return <StationMap />;
     }
   };
 
-  return <>{renderContent()}</>;
+  return (
+    <>
+      {renderContent()}
+      <LoginToast toasts={toasts} onClose={dismiss} onClickToast={handleToastClick} />
+    </>
+  );
 }
