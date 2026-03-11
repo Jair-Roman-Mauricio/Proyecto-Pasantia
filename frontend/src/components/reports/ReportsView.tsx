@@ -191,7 +191,7 @@ export default function ReportsView() {
                 <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} />
                 <YAxis stroke="var(--text-muted)" fontSize={11} unit=" kW" />
                 <Tooltip
-                  formatter={(value: number) => [`${value.toFixed(1)} kW`]}
+                  formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)} kW` : '']}
                   contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                   labelStyle={{ color: 'var(--text-primary)' }}
                   itemStyle={{ color: 'var(--text-primary)' }}
