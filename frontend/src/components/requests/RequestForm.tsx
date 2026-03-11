@@ -71,6 +71,14 @@ export default function RequestForm({ onClose, onCreated }: RequestFormProps) {
       setError('Ingrese la denominacion del sub-circuito');
       return;
     }
+    if (parseFloat(loadKw) < 0) {
+      setError('PI (kW) no puede ser negativo');
+      return;
+    }
+    if (parseFloat(fd) < 0) {
+      setError('El Factor de Demanda no puede ser negativo');
+      return;
+    }
     setIsSubmitting(true);
     setError('');
     try {
@@ -174,7 +182,7 @@ export default function RequestForm({ onClose, onCreated }: RequestFormProps) {
                 label="MM2"
                 value={subMm2}
                 onChange={(e) => setSubMm2(e.target.value)}
-                placeholder="Ej: 3x4"
+                placeholder="Ej: 4"
               />
             </div>
             <div className="grid grid-cols-3 gap-4">
@@ -208,10 +216,10 @@ export default function RequestForm({ onClose, onCreated }: RequestFormProps) {
         {!circuitId && (
           <>
             <Input
-              label="Local/ITEM"
+              label="Descripcion"
               value={localItem}
               onChange={(e) => setLocalItem(e.target.value)}
-              placeholder="Ej: 200"
+              placeholder="Descripcion del circuito solicitado"
             />
 
             <div className="grid grid-cols-3 gap-4">

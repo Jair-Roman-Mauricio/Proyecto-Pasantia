@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import check_permission
+from app.dependencies import check_permission, require_admin
 from app.models.user import User
 from app.models.bar import Bar
-from app.schemas.bar import BarResponse
+from app.schemas.bar import BarResponse, BarUpdate
+from app.utils.db_helpers import safe_commit
 from app.services.energy_calculator import EnergyCalculator
 
 router = APIRouter(prefix="/bars", tags=["Bars"])
@@ -97,3 +98,30 @@ def get_bar_power_summary(
     if not summary:
         raise HTTPException(status_code=404, detail="Barra no encontrada")
     return summary
+
+
+@router.put(
+    "/{bar_id}/capacity",
+    response_model=BarResponse,
+    summary="Actualizar capacidad del tablero",
+    description="Actualiza la capacidad máxima en kW y A de una barra eléctrica. Solo admin.",
+    responses={
+        401: {"description": "No autenticado"},
+        403: {"description": "Se requiere rol admin"},
+        404: {"description": "Barra no encontrada"},
+    },
+)
+def update_bar_capacity(
+    bar_id: int,
+    data: BarUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    bar = db.query(Bar).filter(Bar.id == bar_id).first()
+    if not bar:
+        raise HTTPException(status_code=404, detail="Barra no encontrada")
+    bar.capacity_kw = data.capacity_kw
+    bar.capacity_a = data.capacity_a
+    safe_commit(db)
+    db.refresh(bar)
+    return bar

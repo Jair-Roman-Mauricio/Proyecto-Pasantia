@@ -1,10 +1,32 @@
-# Documentación del Frontend — Linea 1 Metro
+# Frontend — Sistema de Gestión Energética · Línea 1 Metro
 
-Sistema de Gestión Energética para la Línea 1 del Metro de Lima.
+> **Versión:** 1.1.8 · **Stack:** React 19 + TypeScript 5.9 + Vite 7 + Tailwind CSS 4
+> **Directorio raíz:** `frontend/src/`
 
 ---
 
-## Stack tecnológico
+## Tabla de contenidos
+
+1. [Stack tecnológico](#1-stack-tecnológico)
+2. [Estructura de carpetas](#2-estructura-de-carpetas)
+3. [Punto de entrada](#3-punto-de-entrada)
+4. [Tipos TypeScript](#4-tipos-typescript)
+5. [Configuración](#5-configuración)
+6. [Contextos (estado global)](#6-contextos-estado-global)
+7. [Servicios (capa HTTP)](#7-servicios-capa-http)
+8. [Componentes UI reutilizables](#8-componentes-ui-reutilizables)
+9. [Layout](#9-layout)
+10. [Páginas](#10-páginas)
+11. [Componentes de detalle de estación](#11-componentes-de-detalle-de-estación)
+12. [Componentes de gestión (admin)](#12-componentes-de-gestión-admin)
+13. [Componente de notificaciones](#13-componente-de-notificaciones)
+14. [Autenticación](#14-autenticación)
+15. [CSS Global y sistema de temas](#15-css-global-y-sistema-de-temas)
+16. [Patrones recurrentes](#16-patrones-recurrentes)
+
+---
+
+## 1. Stack tecnológico
 
 | Librería | Versión | Para qué se usa |
 |---|---|---|
@@ -21,7 +43,7 @@ Sistema de Gestión Energética para la Línea 1 del Metro de Lima.
 
 ---
 
-## Estructura de carpetas
+## 2. Estructura de carpetas
 
 ```
 frontend/src/
@@ -90,7 +112,7 @@ frontend/src/
 
 ---
 
-## 1. Punto de entrada
+## 3. Punto de entrada
 
 ### `src/main.tsx`
 
@@ -161,7 +183,7 @@ export default function App() {
 
 ---
 
-## 2. Tipos TypeScript
+## 4. Tipos TypeScript
 
 ### `src/types/index.ts`
 
@@ -190,7 +212,7 @@ Define las interfaces de todos los datos que viajan entre el frontend y el backe
 
 ---
 
-## 3. Configuración
+## 5. Configuración
 
 ### `src/config/api.ts`
 
@@ -264,7 +286,7 @@ export const CIRCUIT_STATUS_COLORS = {
 
 ---
 
-## 4. Contextos (estado global)
+## 6. Contextos (estado global)
 
 Los contextos de React permiten compartir datos entre componentes sin pasar props manualmente por cada nivel. Se usan tres contextos en esta app.
 
@@ -360,7 +382,7 @@ const [isCollapsed, setIsCollapsed] = useState(false);
 
 ---
 
-## 5. Servicios (capa HTTP)
+## 7. Servicios (capa HTTP)
 
 Los servicios son módulos que encapsulan todas las llamadas HTTP a la API. Los componentes importan los servicios en lugar de usar `axios` directamente. Esto separa la lógica de red de la lógica de interfaz.
 
@@ -418,9 +440,23 @@ export const circuitService = {
 
 **`force?: boolean` en `create`:** El backend puede rechazar la creación si la capacidad del transformador se excede, pero permite forzar la operación. El frontend envía `force: true` cuando el usuario confirma que quiere continuar de todas formas.
 
+### Endpoints adicionales (usados directamente con `api`)
+
+Varios componentes llaman a `api` (instancia Axios de `src/config/api.ts`) directamente sin pasar por un servicio dedicado:
+
+| Módulo | Endpoints usados |
+|--------|-----------------|
+| **Notificaciones** | `GET /notifications`, `PUT /notifications/:id/read`, `PUT /notifications/:id/dismiss`, `PUT /notifications/:id/extend`, `PUT /notifications/:id/resolve-reserve` |
+| **Solicitudes** | `POST /requests`, `GET /requests`, `PUT /requests/:id/approve`, `PUT /requests/:id/reject`, `GET /requests/circuit-options/:barId` |
+| **Usuarios** | `GET /users`, `POST /users`, `PUT /users/:id`, `DELETE /users/:id`, `GET /users/:id/permissions`, `PUT /users/:id/permissions` |
+| **Auditoría** | `GET /audit`, `PUT /audit/:id/flag`, `GET /audit/export` |
+| **Reportes** | `GET /reports/stations`, `GET /reports/export` |
+| **Imágenes** | `POST /images/station/:id/summary`, `POST /images/station/:id/unifilar`, `GET /images/station/:id/summary`, `GET /images/station/:id/unifilar` |
+| **Backups** | `GET /backups`, `POST /backups`, `GET /backups/:id/download`, `POST /backups/:id/restore`, `DELETE /backups/:id`, `GET /backups/pgdump/download` |
+
 ---
 
-## 6. Componentes UI reutilizables
+## 8. Componentes UI reutilizables
 
 Estos componentes no tienen lógica de negocio. Son bloques de construcción visuales usados en toda la app. Todos están en `src/components/ui/`.
 
@@ -521,7 +557,7 @@ Indicador de carga animado. Acepta `size` para ajustar el tamaño. Se usa en cua
 
 ---
 
-## 7. Layout
+## 9. Layout
 
 ### `src/components/layout/AppLayout.tsx`
 
@@ -594,7 +630,7 @@ const options = viewMode === 'admin' && user?.role === 'admin'
 
 ---
 
-## 8. Páginas
+## 10. Páginas
 
 ### `src/pages/LoginPage.tsx`
 
@@ -673,7 +709,7 @@ useEffect(() => {
 
 ---
 
-## 9. Componentes de detalle de estación
+## 11. Componentes de detalle de estación
 
 ### `BarsCircuitsTab.tsx`
 
@@ -764,14 +800,15 @@ MD = PI × F.D. Se recalcula en cada render en lugar de almacenarlo en estado. E
 
 ### `SubCircuitForm.tsx`
 
-Similar a `CircuitForm` pero para sub-circuitos. Incluye campos adicionales: ITM, MM2 (especificaciones del cable) y override manual del MD.
+Similar a `CircuitForm` pero para sub-circuitos. Incluye campos adicionales: ITM (referencia del interruptor termomagnético) y MM2 (sección del conductor en mm²).
 
-**`mdManual` + `mdOverride`:**
+**Cálculo de MD:**
 ```tsx
-const [mdManual, setMdManual] = useState('');
-const [mdOverride, setMdOverride] = useState(false);
+const calculatedMd = (piNum * fdNum).toFixed(2);
+// ...
+value={mdKw || calculatedMd}
 ```
-Por defecto el MD se calcula automáticamente. Si el usuario activa el override, puede ingresar un MD personalizado. Cuando `mdOverride` es `false`, el campo MD se muestra como solo lectura con el valor calculado.
+MD se calcula en render como PI × F.D. El campo MD es editable: el usuario puede sobreescribir el valor manualmente, pero si se deja vacío muestra el resultado del cálculo automático. No existe un estado `mdOverride` separado; la lógica usa `mdKw || calculatedMd` directamente.
 
 ---
 
@@ -885,7 +922,89 @@ Similar a `SummaryTab` pero para el diagrama unifilar. Muestra la imagen del dia
 
 ---
 
-## 10. Componente de notificaciones
+## 12. Componentes de gestión (admin)
+
+Estos componentes solo son accesibles con rol `admin` (o con el permiso correspondiente para Opersac). Se renderizan desde `DashboardPage` según la opción activa del sidebar.
+
+---
+
+### `src/components/requests/RequestTable.tsx`
+
+Lista y gestión de solicitudes de ampliación de carga enviadas por usuarios Opersac. Permite al admin **aprobar** (creando el circuito o sub-circuito automáticamente) o **rechazar** con motivo.
+
+**Estados clave:**
+```tsx
+const [requests, setRequests] = useState<LoadRequest[]>([]);
+const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+const [rejectTarget, setRejectTarget] = useState<LoadRequest | null>(null);
+const [rejectReason, setRejectReason] = useState('');
+```
+
+**Flujo de aprobación:** `PUT /requests/:id/approve` → el backend crea el circuito o sub-circuito correspondiente y recalcula la energía de la estación.
+
+**`rejectTarget`:** Al hacer clic en "Rechazar", guarda la solicitud en este estado y abre un modal para ingresar el motivo. `null` = modal cerrado.
+
+---
+
+### `src/components/requests/RequestForm.tsx`
+
+Formulario modal para que usuarios Opersac envíen solicitudes de ampliación. Incluye selección en cascada: estación → barra → circuito (opcional).
+
+**Lógica de bifurcación:**
+- Si el usuario **no selecciona circuito** → solicita un circuito nuevo en la barra
+- Si el usuario **selecciona un circuito existente** → aparece el bloque de datos del sub-circuito a crear
+
+**Validaciones en submit:**
+- Campos obligatorios: estación, barra y carga (PI en kW)
+- Si se seleccionó circuito, la denominación del sub-circuito es obligatoria
+- PI (kW) y F.D no pueden ser negativos (validación HTML `min="0"` + guard en `handleSubmit`)
+
+---
+
+### `src/components/users/UserTable.tsx`
+
+Gestión CRUD de usuarios. Permite crear, editar, activar/desactivar y configurar permisos de usuarios Opersac.
+
+**Estados clave:**
+```tsx
+const [users, setUsers] = useState<User[]>([]);
+const [editTarget, setEditTarget] = useState<User | null>(null);
+const [permTarget, setPermTarget] = useState<User | null>(null);
+```
+
+**`permTarget`:** Cuando el admin hace clic en "Permisos" de un usuario Opersac, abre un modal donde puede activar/desactivar cada `feature_key` individualmente. Los cambios se envían como `PUT /users/:id/permissions`.
+
+**Usuarios admin:** No muestran el botón de permisos (los admins no tienen restricciones).
+
+---
+
+### `src/components/audit/AuditTable.tsx`
+
+Tabla de auditoría con todos los eventos del sistema. Solo lectura salvo la función de **marcar registros** para revisión especial (`is_flagged`).
+
+**Filtros disponibles:** por acción, entidad, usuario, rango de fechas.
+
+**Exportar a Excel:** Usa la librería `XLSX` para generar un archivo `.xlsx` con el historial filtrado. `GET /audit/export` devuelve los datos; el frontend genera el archivo en el browser sin descarga del servidor.
+
+**`is_flagged`:** El admin puede marcar cualquier registro como sospechoso con un motivo (`PUT /audit/:id/flag`). Las filas marcadas se destacan visualmente.
+
+---
+
+### `src/components/reports/ReportsView.tsx`
+
+Vista de reportes energéticos de las estaciones. Muestra tablas y gráficos con el estado de demanda, capacidad disponible y alertas por estación.
+
+Permite exportar el reporte completo a Excel con `GET /reports/export`.
+
+---
+
+### `src/components/guide/GuideView.tsx`
+
+Manual de usuario integrado en la propia aplicación. Muestra la documentación de uso del sistema según el rol del usuario activo (versión admin o versión Opersac). Contenido estático renderizado como HTML/Markdown dentro del dashboard.
+
+---
+
+## 13. Componente de notificaciones
 
 ### `src/components/notifications/NotificationList.tsx`
 
@@ -917,7 +1036,7 @@ El filtrado se hace sobre los datos ya cargados, sin volver a llamar al API. Est
 
 ---
 
-## 11. Componente de autenticación
+## 14. Autenticación
 
 ### `src/components/auth/ProtectedRoute.tsx`
 
@@ -941,7 +1060,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
 ---
 
-## 12. CSS Global y sistema de temas
+## 15. CSS Global y sistema de temas
 
 ### `src/index.css`
 
@@ -988,3 +1107,130 @@ Unifica el estilo del scrollbar en Chrome/Edge para que combine con el tema.
 * { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.1s ease; }
 ```
 Hace que el cambio de tema sea suave en toda la app sin configurarlo componente por componente.
+
+---
+
+## 16. Patrones recurrentes
+
+Los siguientes patrones se repiten en varios componentes. Conocerlos facilita leer y extender el código.
+
+---
+
+### Patrón 1 — Confirmación forzada (force-confirm modal)
+
+**Dónde:** `CircuitForm.tsx`
+
+Cuando el backend responde con `requires_force: true`, en lugar de usar `window.confirm()`, el formulario abre un segundo modal con el mensaje de advertencia. El payload se guarda temporalmente. Si el usuario confirma, se reenvía con `force: true`.
+
+```tsx
+// Estado para el flujo de confirmación:
+const [forceMessage, setForceMessage] = useState<string | null>(null);
+const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
+
+// Al recibir requires_force del backend:
+setPendingPayload(payload);
+setForceMessage(detail.message);
+
+// Al confirmar:
+await circuitService.create(barId, { ...pendingPayload, force: true });
+```
+
+**Por qué no `window.confirm()`:** El diálogo nativo del browser no se puede estilizar ni bloquear durante operaciones asíncronas. El modal personalizado mantiene la consistencia visual y permite deshabilitar botones durante el envío.
+
+---
+
+### Patrón 2 — Recarga forzada de imágenes (`imageKey`)
+
+**Dónde:** `SummaryTab.tsx`, `UnifilarTab.tsx`
+
+El navegador cachea imágenes por URL. Cuando se sube una imagen nueva (misma URL, contenido distinto), el browser no la recarga. Incrementar `imageKey` cambia el `key` del `<img>`, forzando a React a desmontar y remontar el elemento y al browser a descargar la imagen.
+
+```tsx
+const [imageKey, setImageKey] = useState(0);
+// Al subir imagen exitosamente:
+setImageKey(prev => prev + 1);
+// En el render:
+<img key={imageKey} src={imageUrl} ... />
+```
+
+---
+
+### Patrón 3 — `Set<number>` para selección múltiple
+
+**Dónde:** `StatusChangeModal.tsx` (`selectedIds`), `BarsCircuitsTab.tsx` (`expandedBars`)
+
+Un `Set` es la estructura correcta para saber si un ID está en la colección con O(1), en lugar de `Array.includes()` que es O(n) y se ejecuta en cada render.
+
+```tsx
+const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+const toggle = (id: number) => {
+  setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+};
+```
+
+**Nota:** Para actualizar un `Set` en React, siempre crear una copia con `new Set(prev)`. Mutar el Set existente no dispara un re-render.
+
+---
+
+### Patrón 4 — Valor derivado en lugar de estado
+
+**Dónde:** `CircuitForm.tsx` (`mdKw`, `isReserve`), `RequestForm.tsx` (`mdKw`)
+
+Si un valor se puede calcular a partir de otro estado, no debe ser un `useState` separado. Mantener dos estados sincronizados es una fuente de bugs.
+
+```tsx
+// MAL — dos estados que hay que mantener sincronizados:
+const [isReserve, setIsReserve] = useState(false);
+// ...si alguien cambia status sin actualizar isReserve → inconsistencia
+
+// BIEN — valor derivado, siempre consistente:
+const isReserve = status === 'reserve_r' || status === 'reserve_equipped_re';
+const mdKw = (parseFloat(piKw) || 0) * (parseFloat(fd) || 1);
+```
+
+---
+
+### Patrón 5 — Cerrar dropdown al clic externo
+
+**Dónde:** `Header.tsx` (menú de usuario)
+
+Patrón estándar para cerrar cualquier elemento flotante (dropdown, popover) cuando el usuario hace clic fuera de él.
+
+```tsx
+const dropdownRef = useRef<HTMLDivElement>(null);
+
+useEffect(() => {
+  function handleClickOutside(event: MouseEvent) {
+    if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      setIsDropdownOpen(false);
+    }
+  }
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, []);
+```
+
+El `return () => removeEventListener(...)` es la función de cleanup: elimina el listener cuando el componente se desmonta para evitar memory leaks y llamadas a `setState` en componentes desmontados.
+
+---
+
+### Patrón 6 — `useCallback` para estabilizar referencias
+
+**Dónde:** `AuthContext.tsx` (`hasPermission`, `refreshPermissions`), `StationDetailPage.tsx` (`refreshStation`)
+
+`useCallback` memoriza una función para que no se recree en cada render. Es crítico cuando la función se pasa como prop a componentes hijos o se usa como dependencia de un `useEffect`.
+
+```tsx
+// Sin useCallback: nueva referencia en cada render → children se re-renderizan innecesariamente
+const refreshStation = () => stationService.getById(id).then(setStation);
+
+// Con useCallback: misma referencia mientras las deps no cambien
+const refreshStation = useCallback(() => {
+  stationService.getById(Number(stationId)).then(setStation);
+}, [stationId]);
+```

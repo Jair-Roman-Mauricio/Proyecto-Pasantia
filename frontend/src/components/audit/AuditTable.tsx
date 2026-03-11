@@ -151,8 +151,43 @@ export default function AuditTable() {
           <div className="w-40">
             <Input label="Hasta" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
-          <div className="w-44">
-            <Input label="Accion" placeholder="Ej: crear, aprobar..." value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} />
+          <div className="w-52">
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Accion</label>
+            <select
+              value={actionFilter}
+              onChange={(e) => setActionFilter(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Todas</option>
+              <optgroup label="Circuitos">
+                <option value="CREATE_CIRCUIT">Crear circuito</option>
+                <option value="UPDATE_CIRCUIT">Editar circuito</option>
+                <option value="CHANGE_CIRCUIT_STATUS">Cambiar estado circuito</option>
+                <option value="DELETE_CIRCUIT">Eliminar circuito</option>
+              </optgroup>
+              <optgroup label="Sub-circuitos">
+                <option value="CREATE_SUB_CIRCUIT">Crear sub-circuito</option>
+                <option value="CHANGE_SUB_CIRCUIT_STATUS">Cambiar estado sub-circuito</option>
+                <option value="DELETE_SUB_CIRCUIT">Eliminar sub-circuito</option>
+              </optgroup>
+              <optgroup label="Solicitudes">
+                <option value="CREATE_REQUEST">Crear solicitud</option>
+                <option value="APPROVE_REQUEST">Aprobar solicitud</option>
+                <option value="REJECT_REQUEST">Rechazar solicitud</option>
+              </optgroup>
+              <optgroup label="Usuarios">
+                <option value="CREATE_USER">Crear usuario</option>
+                <option value="UPDATE_USER">Editar usuario</option>
+                <option value="DELETE_USER">Eliminar usuario</option>
+              </optgroup>
+              <optgroup label="Otros">
+                <option value="CREATE_BACKUP">Crear backup</option>
+                <option value="RESTORE_BACKUP">Restaurar backup</option>
+                <option value="DELETE_BACKUP">Eliminar backup</option>
+                <option value="REPLACE_IMAGE">Reemplazar imagen</option>
+                <option value="DELETE_OBSERVATION">Eliminar observacion</option>
+              </optgroup>
+            </select>
           </div>
           <div className="w-40">
             <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Entidad</label>

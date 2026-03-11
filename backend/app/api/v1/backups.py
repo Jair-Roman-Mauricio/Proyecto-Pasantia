@@ -86,6 +86,7 @@ def get_backups(db: Session = Depends(get_db), _: User = Depends(require_admin))
 @router.post(
     "",
     response_model=BackupResponse,
+    status_code=201,
     summary="Crear backup",
     description="""Crea un respaldo completo de la base de datos en formato JSON. Solo admin.\n\nEl backup incluye: estaciones, barras, circuitos, sub-circuitos, observaciones, notificaciones y solicitudes.\n\nOpcionalmente puede incluir los logs de auditoría (`includes_audit: true`).\n\nEl backup se guarda en la BD con nombre de archivo `backup_YYYYMMDD_HHMMSS.json`.""",
     response_description="Metadatos del backup creado",
@@ -214,14 +215,15 @@ def restore_backup(
         for station in db.query(Station).all():
             calculator.recalculate_station(station.id)
 
-        # Reiniciar secuencias para que nuevas inserciones no colisionen con los IDs restaurados
-        for tbl in ["stations", "bars", "circuits", "sub_circuits",
-                     "observations", "notifications", "requests", "audit_logs"]:
-            db.execute(text(
-                f"SELECT setval(pg_get_serial_sequence('{tbl}', 'id'), "
-                f"COALESCE((SELECT MAX(id) FROM {tbl}), 1))"
-            ))
-        db.commit()
+        # Reiniciar secuencias (solo en PostgreSQL; SQLite usa autoincrement y no requiere esto)
+        if db.bind.dialect.name == "postgresql":
+            for tbl in ["stations", "bars", "circuits", "sub_circuits",
+                         "observations", "notifications", "requests", "audit_logs"]:
+                db.execute(text(
+                    f"SELECT setval(pg_get_serial_sequence('{tbl}', 'id'), "
+                    f"COALESCE((SELECT MAX(id) FROM {tbl}), 1))"
+                ))
+            db.commit()
 
     except Exception:
         db.rollback()

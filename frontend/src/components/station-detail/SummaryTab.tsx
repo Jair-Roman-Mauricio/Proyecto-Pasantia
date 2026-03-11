@@ -29,6 +29,8 @@ export default function SummaryTab({ station }: SummaryTabProps) {
     api.get(`/images/transformer/${station.id}`, { responseType: 'blob' })
       .then((res) => {
         if (cancelled) return;
+        // 204 = sin imagen subida; no se intenta crear un blob URL vacío
+        if (res.status === 204) { setBlobUrl(null); return; }
         if (prevBlobUrl.current) URL.revokeObjectURL(prevBlobUrl.current);
         const url = URL.createObjectURL(res.data);
         prevBlobUrl.current = url;

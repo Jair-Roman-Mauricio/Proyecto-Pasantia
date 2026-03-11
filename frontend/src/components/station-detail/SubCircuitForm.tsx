@@ -45,6 +45,9 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
     e.preventDefault();
     if (!name || !piKw) return;
     if (isReserve && !reserveExpiresAt) return;
+    if (parseFloat(piKw) < 0) return;
+    if (parseFloat(fd) < 0) return;
+    if (mdKw && parseFloat(mdKw) < 0) return;
     setIsSubmitting(true);
     try {
       await circuitService.createSubCircuit(circuitId, {
@@ -93,7 +96,7 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
             label="MM2"
             value={mm2}
             onChange={(e) => setMm2(e.target.value)}
-            placeholder="Ej: 3x4"
+            placeholder="Ej: 4"
           />
         </div>
         <div>
@@ -122,6 +125,7 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
             label="PI (kW) *"
             type="number"
             step="0.01"
+            min="0"
             value={piKw}
             onChange={(e) => handlePiChange(e.target.value)}
             placeholder="0.00"
@@ -131,6 +135,8 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
             label="F.D"
             type="number"
             step="0.0001"
+            min="0"
+            max="1"
             value={fd}
             onChange={(e) => handleFdChange(e.target.value)}
             placeholder="1.0"
@@ -139,6 +145,7 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
             label="MD (kW)"
             type="number"
             step="0.01"
+            min="0"
             value={mdKw || calculatedMd}
             onChange={(e) => setMdKw(e.target.value)}
             placeholder="Auto"

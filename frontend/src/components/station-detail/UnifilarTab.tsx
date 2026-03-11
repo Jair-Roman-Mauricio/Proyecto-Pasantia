@@ -27,6 +27,8 @@ export default function UnifilarTab({ station }: UnifilarTabProps) {
     api.get(`/images/unifilar/${station.id}`, { responseType: 'blob' })
       .then((res) => {
         if (cancelled) return;
+        // 204 = sin imagen subida; no se intenta crear un blob URL vacío
+        if (res.status === 204) { setBlobUrl(null); return; }
         const url = URL.createObjectURL(res.data);
         if (prevBlobUrl.current) URL.revokeObjectURL(prevBlobUrl.current);
         prevBlobUrl.current = url;

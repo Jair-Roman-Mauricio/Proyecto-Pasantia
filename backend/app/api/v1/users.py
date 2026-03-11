@@ -175,3 +175,43 @@ def update_user(
     )
 
     return user
+
+
+@router.delete(
+    "/{user_id}",
+    summary="Eliminar usuario",
+    description="Elimina permanentemente un usuario del sistema. No se puede eliminar el propio usuario autenticado. La acción queda registrada en auditoría. Solo accesible por administradores.",
+    response_description="Confirmación de eliminación",
+    responses={
+        400: {"description": "No se puede eliminar el propio usuario"},
+        401: {"description": "No autenticado"},
+        403: {"description": "Se requiere rol admin"},
+        404: {"description": "Usuario no encontrado"},
+    },
+)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    if user_id == admin.id:
+        raise HTTPException(status_code=400, detail="No puedes eliminar tu propio usuario")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    username = user.username
+    db.delete(user)
+    safe_commit(db)
+
+    audit = AuditService(db)
+    audit.log(
+        user=admin,
+        action="DELETE_USER",
+        entity_type="user",
+        entity_id=user_id,
+        details={"username": username},
+    )
+
+    return {"message": "Usuario eliminado exitosamente"}

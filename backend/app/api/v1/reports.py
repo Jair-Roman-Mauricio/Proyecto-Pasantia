@@ -137,7 +137,7 @@ def get_requests_per_station(
 @router.get(
     "/export/excel",
     summary="Exportar reportes a Excel",
-    description="""Descarga un archivo Excel con dos hojas y gráficos incluidos. **Requiere permiso:** `view_reports`\n\n**Hoja 1 — Demanda Eléctrica:** Tabla con capacidad, demanda y disponible por estación + gráfico de líneas.\n\n**Hoja 2 — Solicitudes por Estación:** Tabla con conteos de solicitudes + gráfico de barras apiladas.\n\nFiltrable por rango de fechas (`start_date`, `end_date`).""",
+    description="""Descarga un archivo Excel con dos hojas y gráficos incluidos. **Requiere permiso:** `view_reports`\n\n**Hoja 1 — Demanda Eléctrica:** Tabla con capacidad, demanda actual, energía disponible y estado por estación + gráfico de barras agrupadas (Demanda Actual vs Energía Disponible).\n\n**Hoja 2 — Solicitudes por Estación:** Tabla con conteos de solicitudes + gráfico de barras apiladas.\n\nFiltrable por rango de fechas (`start_date`, `end_date`).""",
     response_description="Archivo Excel (reportes.xlsx)",
     responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_reports no habilitado"}},
 )
@@ -148,18 +148,27 @@ def export_reports_excel(
     _: User = Depends(check_permission("view_reports")),
 ):
     from openpyxl import Workbook
-    from openpyxl.chart import LineChart as XlLineChart, BarChart as XlBarChart, Reference
-    from openpyxl.chart.series import DataPoint
     from openpyxl.utils import get_column_letter
+    from openpyxl.styles import PatternFill, Font
 
     wb = Workbook()
 
-    # ── Hoja 1: Demanda Eléctrica — tabla con capacidad, demanda y disponible por estación ──
+    # ── Hoja 1: Demanda vs Energía Disponible — tabla con capacidad, demanda y disponible por estación ──
     ws1 = wb.active
     ws1.title = "Demanda Electrica"
-    ws1.append(["Estacion", "Codigo", "Capacidad (kW)", "Demanda Max (kW)", "Disponible (kW)"])
+    ws1.append(["Estacion", "Codigo", "Capacidad (kW)", "Demanda Actual (kW)", "Energia Disponible (kW)", "Estado"])
+
+    # Estilo de cabecera
+    header_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    for cell in ws1[1]:
+        cell.fill = header_fill
+        cell.font = header_font
 
     stations = db.query(Station).order_by(Station.order_index).all()
+
+    # Mapeo de estado a texto legible
+    status_labels = {"green": "Energia suficiente", "yellow": "Menos del 20% disponible", "red": "Debe energia"}
 
     if not start_date and not end_date:
         for s in stations:
@@ -168,6 +177,7 @@ def export_reports_excel(
                 float(s.transformer_capacity_kw),
                 float(s.max_demand_kw),
                 float(s.available_power_kw),
+                status_labels.get(s.status, s.status),
             ])
     else:
         for s in stations:
@@ -196,44 +206,22 @@ def export_reports_excel(
                     total_md += sum((sc.md_kw for sc in sub_q.all()), Decimal("0"))
             capacity = float(s.transformer_capacity_kw)
             demand = float(total_md)
-            ws1.append([s.name, s.code, capacity, demand, capacity - demand])
+            available = capacity - demand
+            ws1.append([
+                s.name, s.code, capacity, demand, available,
+                status_labels.get(s.status, s.status),
+            ])
 
     # Ajustar ancho de columnas para mejorar la legibilidad del Excel
-    for col in range(1, 6):
-        ws1.column_dimensions[get_column_letter(col)].width = 22
-
-    num_stations = len(stations)
-
-    # Gráfico de líneas: demanda actual vs capacidad instalada por estación
-    if num_stations > 0:
-        chart1 = XlLineChart()
-        chart1.title = "Evolucion de Demanda Electrica"
-        chart1.y_axis.title = "kW"
-        chart1.x_axis.title = "Estacion"
-        chart1.style = 10
-        chart1.width = 28
-        chart1.height = 14
-
-        cats = Reference(ws1, min_col=1, min_row=2, max_row=1 + num_stations)
-        demand_data = Reference(ws1, min_col=4, min_row=1, max_row=1 + num_stations)
-        capacity_data = Reference(ws1, min_col=3, min_row=1, max_row=1 + num_stations)
-
-        chart1.add_data(demand_data, titles_from_data=True)
-        chart1.add_data(capacity_data, titles_from_data=True)
-        chart1.set_categories(cats)
-
-        # Estilo de series: demanda en rojo sólido, capacidad en verde discontinuo
-        s1 = chart1.series[0]
-        s1.graphicalProperties.line.solidFill = "EF4444"
-        s2 = chart1.series[1]
-        s2.graphicalProperties.line.solidFill = "22C55E"
-        s2.graphicalProperties.line.dashStyle = "dash"
-
-        ws1.add_chart(chart1, f"A{num_stations + 4}")
+    for col in range(1, 7):
+        ws1.column_dimensions[get_column_letter(col)].width = 24
 
     # ── Hoja 2: Solicitudes por Estación — tabla con conteos agrupados por estado ──
     ws2 = wb.create_sheet("Solicitudes por Estacion")
     ws2.append(["Estacion", "Pendientes", "Aprobadas", "Rechazadas", "Total"])
+    for cell in ws2[1]:
+        cell.fill = header_fill
+        cell.font = header_font
 
     query = db.query(
         Request.station_id, Station.name, Request.status,
@@ -260,35 +248,6 @@ def export_reports_excel(
     for col in range(1, 6):
         ws2.column_dimensions[get_column_letter(col)].width = 20
 
-    num_req_rows = len(data)
-
-    # Gráfico de barras apiladas: solicitudes pendientes, aprobadas y rechazadas por estación
-    if num_req_rows > 0:
-        chart2 = XlBarChart()
-        chart2.type = "col"
-        chart2.title = "Solicitudes de Opersac por Estacion"
-        chart2.y_axis.title = "Cantidad"
-        chart2.x_axis.title = "Estacion"
-        chart2.style = 10
-        chart2.width = 28
-        chart2.height = 14
-
-        cats2 = Reference(ws2, min_col=1, min_row=2, max_row=1 + num_req_rows)
-        pending_ref = Reference(ws2, min_col=2, min_row=1, max_row=1 + num_req_rows)
-        approved_ref = Reference(ws2, min_col=3, min_row=1, max_row=1 + num_req_rows)
-        rejected_ref = Reference(ws2, min_col=4, min_row=1, max_row=1 + num_req_rows)
-
-        chart2.add_data(pending_ref, titles_from_data=True)
-        chart2.add_data(approved_ref, titles_from_data=True)
-        chart2.add_data(rejected_ref, titles_from_data=True)
-        chart2.set_categories(cats2)
-
-        # Colores de series: pendientes en amarillo, aprobadas en verde, rechazadas en rojo
-        chart2.series[0].graphicalProperties.solidFill = "EAB308"
-        chart2.series[1].graphicalProperties.solidFill = "22C55E"
-        chart2.series[2].graphicalProperties.solidFill = "EF4444"
-
-        ws2.add_chart(chart2, f"A{num_req_rows + 4}")
 
     buffer = io.BytesIO()
     wb.save(buffer)

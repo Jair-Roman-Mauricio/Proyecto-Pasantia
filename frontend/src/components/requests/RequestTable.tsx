@@ -139,7 +139,7 @@ export default function RequestTable() {
                 )}
               </div>
             )}
-            <p className="text-sm"><strong>Local/ITEM:</strong> {selectedRequest.local_item || 'N/A'}</p>
+            <p className="text-sm"><strong>Descripcion:</strong> {selectedRequest.local_item || 'N/A'}</p>
             <p className="text-sm"><strong>PI (kW):</strong> {selectedRequest.requested_load_kw} kW</p>
             <p className="text-sm"><strong>F.D:</strong> {selectedRequest.fd}</p>
             {/* MD calculado en frontend como PI × FD para visualización en el detalle */}

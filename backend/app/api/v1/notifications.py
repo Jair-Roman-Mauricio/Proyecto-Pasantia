@@ -26,7 +26,11 @@ def get_notifications(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    query = db.query(Notification).filter(Notification.is_dismissed == False)
+    # Solo se devuelven notificaciones de reserva y de energía; se excluye el tipo 'system'
+    query = db.query(Notification).filter(
+        Notification.is_dismissed == False,
+        Notification.type.in_(["reserve_no_contact", "negative_energy"]),
+    )
     if is_read is not None:
         query = query.filter(Notification.is_read == is_read)
     if type:
@@ -47,7 +51,11 @@ def get_unread_count(
 ):
     count = (
         db.query(Notification)
-        .filter(Notification.is_read == False, Notification.is_dismissed == False)
+        .filter(
+            Notification.is_read == False,
+            Notification.is_dismissed == False,
+            Notification.type.in_(["reserve_no_contact", "negative_energy"]),
+        )
         .count()
     )
     return {"unread_count": count}
@@ -91,6 +99,10 @@ def extend_notification(
         raise HTTPException(status_code=404, detail="Notificacion no encontrada")
     notif.extended_until = data.extended_until
     notif.is_read = True
+    if notif.circuit_id:
+        circuit = db.query(Circuit).filter(Circuit.id == notif.circuit_id).first()
+        if circuit:
+            circuit.reserve_expires_at = data.extended_until
     safe_commit(db)
     return {"message": "Tiempo extendido"}
 
@@ -135,7 +147,7 @@ def resolve_reserve(
     if notif.circuit_id:
         circuit = db.query(Circuit).filter(Circuit.id == notif.circuit_id).first()
         if circuit:
-            circuit.status = "inactive"
+            circuit.status = "operative_normal"
             circuit.reserve_since = None
             circuit.reserve_expires_at = None
     notif.is_dismissed = True

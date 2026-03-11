@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Plus } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, Pencil } from 'lucide-react';
+import api from '../../config/api';
+import Modal from '../ui/Modal';
+import Input from '../ui/Input';
 import type { Station, Bar, Circuit, SubCircuit, BarPowerSummary } from '../../types';
 import { stationService } from '../../services/stationService';
 import { circuitService } from '../../services/circuitService';
@@ -60,6 +63,11 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
   const [formBarId, setFormBarId] = useState<number | null>(null);
   // Indica si la carga inicial de barras está en progreso
   const [isLoading, setIsLoading] = useState(true);
+  // Controla el modal de edición de capacidad del tablero
+  const [showCapacityForm, setShowCapacityForm] = useState(false);
+  const [capacityKw, setCapacityKw] = useState('');
+  const [capacityA, setCapacityA] = useState('');
+  const [capacityError, setCapacityError] = useState('');
 
   // Solo los admins en modo admin pueden crear/editar; los opersac solo visualizan
   const isAdmin = user?.role === 'admin' && viewMode === 'admin';
@@ -147,6 +155,34 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
     if (formBarId) loadBarCircuits(formBarId);
     if (selectedBar) circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
     onStationChanged?.();
+  };
+
+  // Abre el modal de capacidad precargando los valores actuales de la barra seleccionada
+  const openCapacityForm = () => {
+    if (!selectedBar) return;
+    setCapacityKw(Number(selectedBar.capacity_kw).toString());
+    setCapacityA(Number(selectedBar.capacity_a).toString());
+    setCapacityError('');
+    setShowCapacityForm(true);
+  };
+
+  // Guarda la nueva capacidad del tablero y refresca el resumen de potencia
+  const handleSaveCapacity = async () => {
+    if (!selectedBar) return;
+    const kw = parseFloat(capacityKw);
+    const a = parseFloat(capacityA);
+    if (isNaN(kw) || kw < 0 || isNaN(a) || a < 0) {
+      setCapacityError('Ingrese valores numéricos válidos mayores o iguales a 0');
+      return;
+    }
+    try {
+      const { data } = await api.put(`/bars/${selectedBar.id}/capacity`, { capacity_kw: kw, capacity_a: a });
+      setBars((prev) => prev.map((b) => b.id === selectedBar.id ? { ...b, capacity_kw: data.capacity_kw, capacity_a: data.capacity_a } : b));
+      setShowCapacityForm(false);
+      circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
+    } catch {
+      setCapacityError('Error al guardar la capacidad');
+    }
   };
 
   // Callback tras eliminar un circuito: recarga circuitos y resumen de potencia de la barra activa
@@ -254,6 +290,15 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
                     <Button variant="ghost" size="sm" onClick={() => setIsEditMode(false)}>Salir Edicion</Button>
                   </>
                 )}
+                {isAdmin && !selectedCircuit && (
+                  <button
+                    onClick={openCapacityForm}
+                    title="Editar capacidad del tablero"
+                    className="p-1.5 rounded hover:bg-[var(--hover-bg)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => setShowObservations(true)}>Observaciones</Button>
               </div>
             </div>
@@ -322,6 +367,34 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
             onSaved={() => { setShowStatusChange(false); if (selectedBar) loadBarCircuits(selectedBar.id); onStationChanged?.(); }}
           />
         )
+      )}
+      {/* Modal de edición de capacidad del tablero */}
+      {showCapacityForm && selectedBar && (
+        <Modal isOpen onClose={() => setShowCapacityForm(false)} title={`Capacidad — ${selectedBar.name}`} size="sm">
+          <div className="space-y-4">
+            <Input
+              label="Capacidad (kW)"
+              type="number"
+              step="0.01"
+              min="0"
+              value={capacityKw}
+              onChange={(e) => setCapacityKw(e.target.value)}
+            />
+            <Input
+              label="Capacidad (A)"
+              type="number"
+              step="0.01"
+              min="0"
+              value={capacityA}
+              onChange={(e) => setCapacityA(e.target.value)}
+            />
+            {capacityError && <p className="text-sm text-red-500">{capacityError}</p>}
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" onClick={() => setShowCapacityForm(false)}>Cancelar</Button>
+              <Button onClick={handleSaveCapacity}>Guardar</Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

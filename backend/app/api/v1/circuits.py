@@ -61,6 +61,7 @@ def get_circuit(
 @router.post(
     "/bar/{bar_id}",
     response_model=CircuitResponse,
+    status_code=201,
     summary="Crear circuito en una barra",
     description="""Crea un nuevo circuito en la barra indicada. Solo admin.\n\n**MD:** Si no se provee `md_kw`, se calcula como `pi_kw × fd`.\n\n**Capacidad:** Si excede la disponible, retorna 400 con `requires_force: true`. Enviar `"force": true` para confirmar.\n\n**UPS:** Requiere `secondary_bar_id` y `tertiary_bar_id` distintas entre sí y a la primaria.\n\nEstados: `operative_normal`, `reserve_r`, `reserve_equipped_re`, `inactive`""",
     response_description="Datos del circuito recién creado",
@@ -111,6 +112,12 @@ def create_circuit(
                 status_code=400,
                 detail="Las dos barras de conexion deben ser diferentes entre si",
             )
+
+    if data.status in ("reserve_r", "reserve_equipped_re") and not data.reserve_expires_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Los circuitos en reserva requieren fecha de vencimiento (reserve_expires_at)",
+        )
 
     circuit = Circuit(
         bar_id=bar_id,

@@ -122,9 +122,25 @@ export default function GuideView() {
   const current = sections.find((s) => s.id === activeSection) ?? sections[0];
 
   return (
-    <div className="flex gap-0 min-h-[600px]">
-      {/* Sidebar nav */}
-      <aside className="w-52 shrink-0 border-r border-[var(--border-color)] pr-0 py-2">
+    <div className="flex flex-col sm:flex-row gap-0 min-h-[600px]">
+      {/* Navegación móvil: selector desplegable */}
+      <div className="sm:hidden px-1 pb-4">
+        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
+          {isAdmin ? 'Manual Admin' : 'Manual Opersac'}
+        </p>
+        <select
+          value={activeSection}
+          onChange={(e) => setActiveSection(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          {sections.map((s) => (
+            <option key={s.id} value={s.id}>{s.title}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Sidebar nav — solo visible en sm+ */}
+      <aside className="hidden sm:block w-52 shrink-0 border-r border-[var(--border-color)] py-2">
         <p className="px-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
           {isAdmin ? 'Manual Admin' : 'Manual Opersac'}
         </p>
@@ -145,8 +161,8 @@ export default function GuideView() {
         </nav>
       </aside>
 
-      {/* Content */}
-      <div className="flex-1 px-8 py-4 max-w-2xl">
+      {/* Contenido */}
+      <div className="flex-1 px-2 sm:px-8 py-4 max-w-2xl">
         <h2 className="text-xl font-bold text-[var(--text-primary)] mb-1">{current.title}</h2>
         <div className="w-10 h-0.5 bg-primary-500 mb-6 rounded-full" />
 

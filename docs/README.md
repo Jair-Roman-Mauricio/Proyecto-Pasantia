@@ -5,9 +5,12 @@
 | Documento | Descripción |
 |-----------|-------------|
 | [api-reference.md](api-reference.md) | Referencia completa de todos los endpoints de la API REST |
+| [database.md](database.md) | Esquema técnico de la BD: tablas, columnas, relaciones FK y diagrama ERD |
+| [frontend-docs.md](frontend-docs.md) | Arquitectura del frontend: componentes, servicios, contextos y patrones |
+| [arquitectura.md](arquitectura.md) | Descripción técnica del sistema: stack, modelos de datos, flujos |
+| [deploy.md](deploy.md) | Guía de despliegue: Docker, Supabase, bare metal, backups y seguridad |
 | [guia-admin.md](guia-admin.md) | Manual de usuario para el rol **Administrador** |
 | [guia-opersac.md](guia-opersac.md) | Manual de usuario para el rol **OPERSAC** (Operador de Servicio) |
-| [arquitectura.md](arquitectura.md) | Descripción técnica del sistema: stack, modelos de datos, flujos |
 
 ---
 
@@ -21,4 +24,4 @@
 
 ## Versión
 
-Sistema versión **1.1.6** — Línea 1 Metro de Lima
+Sistema versión **1.1.8** — Línea 1 Metro de Lima

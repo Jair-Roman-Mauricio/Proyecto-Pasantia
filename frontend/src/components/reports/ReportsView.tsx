@@ -25,29 +25,37 @@ export default function ReportsView() {
   const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
 
   /**
-   * Carga los datos de ambos endpoints de reportes con los parámetros de fecha dados.
-   * Si no se especifican fechas, el backend retorna el historial completo.
+   * Carga el Gráfico 1 (demanda vs energía) siempre sin filtro de fechas,
+   * ya que refleja el estado actual de la estación, no un período histórico.
    */
-  const loadData = (start?: string, end?: string) => {
+  const loadDemand = () => {
+    api.get('/reports/demand-evolution').then((res) => setDemandData(res.data));
+  };
+
+  /**
+   * Carga el Gráfico 2 (solicitudes por estación) aplicando el filtro de fechas indicado.
+   * Si no se especifican fechas, retorna el historial completo de solicitudes.
+   */
+  const loadRequests = (start?: string, end?: string) => {
     const params: Record<string, string> = {};
     if (start) params.start_date = start;
     if (end) params.end_date = end;
-    api.get('/reports/demand-evolution', { params }).then((res) => setDemandData(res.data));
     api.get('/reports/requests-per-station', { params }).then((res) => setRequestsData(res.data));
   };
 
-  // Carga inicial de datos sin filtro al montar el componente
+  // Carga inicial de ambos gráficos al montar el componente
   useEffect(() => {
-    loadData();
+    loadDemand();
+    loadRequests();
   }, []);
 
-  // Selecciona automáticamente la primera estación al cargar los datos
-  // Solo se ejecuta la primera vez que llegan datos y no hay estación previamente seleccionada
+  // Selecciona automáticamente la primera estación al cargar o recargar los datos.
+  // Se reemplaza solo si la estación seleccionada ya no existe en el nuevo resultado.
   useEffect(() => {
-    if (demandData.length > 0 && selectedStationId === null) {
-      setSelectedStationId(demandData[0].station_id);
-    }
-  }, [demandData, selectedStationId]);
+    if (demandData.length === 0) return;
+    const found = demandData.some((d) => d.station_id === selectedStationId);
+    if (!found) setSelectedStationId(demandData[0].station_id);
+  }, [demandData]);
 
   /**
    * Obtiene el objeto de datos de la estación seleccionada en el Gráfico 1.
@@ -71,9 +79,9 @@ export default function ReportsView() {
     ];
   }, [stationData]);
 
-  // Aplica el filtro de fechas recargando ambos endpoints con los parámetros actuales
+  // Aplica el filtro de fechas solo al Gráfico 2 (solicitudes); el Gráfico 1 no se ve afectado
   const handleFilter = () => {
-    loadData(startDate || undefined, endDate || undefined);
+    loadRequests(startDate || undefined, endDate || undefined);
   };
 
   /**
@@ -136,9 +144,9 @@ export default function ReportsView() {
           <Button size="sm" onClick={handleFilter}>
             <Filter size={16} className="mr-1" /> Filtrar
           </Button>
-          {/* Limpiar filtros: restablece fechas vacías y recarga datos sin parámetros */}
+          {/* Limpiar filtros: restablece fechas vacías y recarga solicitudes sin parámetros */}
           {(startDate || endDate) && (
-            <Button variant="ghost" size="sm" onClick={() => { setStartDate(''); setEndDate(''); loadData(); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setStartDate(''); setEndDate(''); loadRequests(); }}>
               Limpiar
             </Button>
           )}
@@ -185,6 +193,8 @@ export default function ReportsView() {
                 <Tooltip
                   formatter={(value: number) => [`${value.toFixed(1)} kW`]}
                   contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                  labelStyle={{ color: 'var(--text-primary)' }}
+                  itemStyle={{ color: 'var(--text-primary)' }}
                   cursor={{ fill: 'rgba(128,128,128,0.08)' }}
                 />
                 {/* Línea de referencia horizontal que marca la capacidad máxima del transformador */}
@@ -218,6 +228,8 @@ export default function ReportsView() {
                 <YAxis stroke="var(--text-muted)" fontSize={11} />
                 <Tooltip
                   contentStyle={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                  labelStyle={{ color: 'var(--text-primary)' }}
+                  itemStyle={{ color: 'var(--text-primary)' }}
                   cursor={{ fill: 'rgba(128,128,128,0.08)' }}
                 />
                 <Legend />

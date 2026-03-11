@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -27,7 +27,9 @@ def get_image(
 ):
     path = image_service.get_image_path(entity_type, entity_id, sub_id)
     if not path:
-        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+        # 204 en lugar de 404 para evitar errores en consola del navegador;
+        # el frontend interpreta 204 como "sin imagen" y muestra el placeholder.
+        return Response(status_code=204)
     return FileResponse(path)
 
 

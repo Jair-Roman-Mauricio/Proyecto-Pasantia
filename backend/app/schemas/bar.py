@@ -4,6 +4,11 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 
+class BarUpdate(BaseModel):
+    capacity_kw: Decimal
+    capacity_a: Decimal
+
+
 class BarResponse(BaseModel):
     id: int
     station_id: int

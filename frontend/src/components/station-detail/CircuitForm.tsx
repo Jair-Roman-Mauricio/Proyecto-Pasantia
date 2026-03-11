@@ -24,7 +24,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
   const [status, setStatus] = useState('operative_normal');
   // Fecha de vencimiento de la reserva; solo aplica cuando el estado es reserve_r o reserve_equipped_re
   const [reserveExpiresAt, setReserveExpiresAt] = useState('');
-  const [localItem, setLocalItem] = useState('');
+  const [description, setDescription] = useState('');
   // Potencia instalada en kW (PI); junto con FD determina la MD
   const [piKw, setPiKw] = useState('');
   // Factor de demanda (FD); valor por defecto 1.0 representa uso al 100%
@@ -76,7 +76,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
     name,
     status,
     reserve_expires_at: isReserve ? reserveExpiresAt : undefined,
-    local_item: localItem || undefined,
+    description: description || undefined,
     pi_kw: parseFloat(piKw),
     fd: parseFloat(fd),
     is_ups: isUps,
@@ -98,6 +98,15 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
     // Validación de conexiones UPS: ambas barras son requeridas cuando isUps es verdadero
     if (isUps && (!secondaryBarId || !tertiaryBarId)) {
       setError('UPS requiere seleccionar ambas barras de conexion');
+      return;
+    }
+    // Validación de valores numéricos no negativos
+    if (parseFloat(piKw) < 0) {
+      setError('PI (kW) no puede ser negativo');
+      return;
+    }
+    if (parseFloat(fd) < 0) {
+      setError('El Factor de Demanda no puede ser negativo');
       return;
     }
     setIsSubmitting(true);
@@ -163,7 +172,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
                 <option value="reserve_equipped_re">Reserva Equipada (R/E)</option>
               </select>
             </div>
-            <Input label="Local/ITEM" value={localItem} onChange={(e) => setLocalItem(e.target.value)} />
+            <Input label="Descripcion" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
           {/* Campo de fecha de expiración: aparece condicionalmente solo para estados de reserva */}
           {isReserve && (
@@ -177,8 +186,8 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
           )}
           {/* Bloque de potencia: PI y FD son editables; MD se calcula automáticamente y es de solo lectura */}
           <div className="grid grid-cols-3 gap-4">
-            <Input label="PI (kW) *" type="number" step="0.01" value={piKw} onChange={(e) => setPiKw(e.target.value)} />
-            <Input label="F.D" type="number" step="0.0001" value={fd} onChange={(e) => setFd(e.target.value)} />
+            <Input label="PI (kW) *" type="number" step="0.01" min="0" value={piKw} onChange={(e) => setPiKw(e.target.value)} />
+            <Input label="F.D" type="number" step="0.0001" min="0" max="1" value={fd} onChange={(e) => setFd(e.target.value)} />
             <div>
               <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">MD (kW)</label>
               {/* MD = PI × FD — campo de solo lectura, actualizado en tiempo real */}
