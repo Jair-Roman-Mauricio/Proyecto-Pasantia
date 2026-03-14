@@ -1,32 +1,38 @@
+import { supabase } from '../config/supabaseClient';
 import api from '../config/api';
-import type { LoginResponse, UserBrief } from '../types';
+import type { UserBrief } from '../types';
 
-/**
- * Servicio de autenticación.
- * Encapsula las peticiones HTTP relacionadas con la identidad del usuario.
- */
 export const authService = {
   /**
-   * Autentica al usuario contra el backend enviando las credenciales al endpoint `/auth/login`.
+   * Autentica al usuario contra Supabase Auth usando email interno.
+   * El email se construye como `{username}@linea1metro.internal`.
    *
-   * @param username - Nombre de usuario registrado en el sistema.
-   * @param password - Contraseña en texto plano (el hash se gestiona en el servidor).
-   * @returns Una promesa que resuelve con el objeto `LoginResponse`, el cual incluye
-   *          el token JWT de acceso y los datos básicos del usuario autenticado.
+   * @returns El access_token de Supabase y los datos de perfil del backend.
    */
-  async login(username: string, password: string): Promise<LoginResponse> {
-    const { data } = await api.post<LoginResponse>('/auth/login', { username, password });
-    return data;
+  async login(username: string, password: string): Promise<{ access_token: string; user: UserBrief }> {
+    const email = `${username}@linea1metro.internal`;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.session) {
+      throw new Error(error?.message || 'Credenciales incorrectas');
+    }
+    const user = await authService.getMe(data.session.access_token);
+    return { access_token: data.session.access_token, user };
   },
 
   /**
-   * Obtiene los datos del usuario actualmente autenticado desde el endpoint `/auth/me`.
-   * Requiere que el interceptor de Axios adjunte el token JWT en la cabecera `Authorization`.
-   *
-   * @returns Una promesa que resuelve con el objeto `UserBrief` del usuario en sesión.
+   * Cierra la sesión en Supabase Auth.
    */
-  async getMe(): Promise<UserBrief> {
-    const { data } = await api.get<UserBrief>('/auth/me');
+  async logout(): Promise<void> {
+    await supabase.auth.signOut();
+  },
+
+  /**
+   * Obtiene el perfil del usuario autenticado desde el backend.
+   * Si no se pasa token, el interceptor de Axios lo adjunta automáticamente.
+   */
+  async getMe(token?: string): Promise<UserBrief> {
+    const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+    const { data } = await api.get<UserBrief>('/auth/me', config);
     return data;
   },
 };

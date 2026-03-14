@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -7,7 +9,7 @@ from app.models.user import User
 from app.models.permission import Permission
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services.audit_service import AuditService
-from app.utils.security import hash_password
+from app.utils.supabase_admin import create_supabase_auth_user, delete_supabase_auth_user
 from app.utils.constants import PERMISSION_FEATURES
 from app.utils.db_helpers import safe_commit
 
@@ -18,15 +20,11 @@ router = APIRouter(prefix="/users", tags=["Users"])
     "",
     response_model=list[UserResponse],
     summary="Listar todos los usuarios",
-    description="Retorna la lista completa de usuarios registrados en el sistema, ordenados por ID. Solo accesible por administradores.",
-    response_description="Lista de usuarios con sus datos completos",
-    responses={
-        401: {"description": "No autenticado"},
-        403: {"description": "Se requiere rol admin"},
-    },
+    description="Retorna la lista completa de usuarios registrados en el sistema. Solo accesible por administradores.",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}},
 )
 def get_users(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    return db.query(User).order_by(User.id).all()
+    return db.query(User).order_by(User.created_at).all()
 
 
 @router.get(
@@ -34,7 +32,6 @@ def get_users(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     response_model=UserResponse,
     summary="Obtener un usuario por ID",
     description="Retorna los datos completos de un usuario específico. Solo accesible por administradores.",
-    response_description="Datos del usuario solicitado",
     responses={
         401: {"description": "No autenticado"},
         403: {"description": "Se requiere rol admin"},
@@ -42,7 +39,7 @@ def get_users(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     },
 )
 def get_user(
-    user_id: int,
+    user_id: uuid.UUID,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
@@ -55,27 +52,23 @@ def get_user(
 @router.post(
     "",
     response_model=UserResponse,
+    status_code=201,
     summary="Crear nuevo usuario",
     description="""
-Crea un nuevo usuario en el sistema. Solo accesible por administradores.
+Crea un nuevo usuario en el sistema y en Supabase Auth. Solo accesible por administradores.
 
-**Roles disponibles:**
-- `admin` — Acceso total al sistema
-- `opersac` — Acceso limitado, controlado por permisos
+El usuario se registra en Supabase usando `{username}@linea1metro.internal` como email.
+El `id` del perfil corresponde al UUID asignado por Supabase Auth.
 
-Al crear un usuario con rol `opersac`, se le asignan automáticamente **todos los permisos habilitados** por defecto.
-El administrador puede luego ajustar los permisos individualmente en `PUT /permissions/users/{user_id}`.
-
-La acción queda registrada en el log de auditoría.
+Al crear un usuario con rol `opersac`, se le asignan todos los permisos habilitados por defecto.
 """,
-    response_description="Datos del usuario recién creado",
     responses={
         400: {"description": "El nombre de usuario ya existe, o el rol es inválido"},
         401: {"description": "No autenticado"},
         403: {"description": "Se requiere rol admin"},
     },
 )
-def create_user(
+async def create_user(
     data: UserCreate,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
@@ -87,9 +80,20 @@ def create_user(
     if data.role not in ("admin", "opersac"):
         raise HTTPException(status_code=400, detail="Rol invalido")
 
+    email = f"{data.username}@linea1metro.internal"
+    try:
+        supabase_user = await create_supabase_auth_user(
+            email=email,
+            password=data.password,
+            username=data.username,
+            role=data.role,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al crear usuario en Supabase: {str(e)}")
+
     user = User(
+        id=uuid.UUID(supabase_user["id"]),
         username=data.username,
-        password_hash=hash_password(data.password),
         full_name=data.full_name,
         role=data.role,
         status="active",
@@ -98,14 +102,9 @@ def create_user(
     safe_commit(db)
     db.refresh(user)
 
-    # Create default permissions for opersac users
     if user.role == "opersac":
         for feature in PERMISSION_FEATURES:
-            perm = Permission(
-                user_id=user.id,
-                feature_key=feature,
-                is_allowed=True,
-            )
+            perm = Permission(user_id=user.id, feature_key=feature, is_allowed=True)
             db.add(perm)
         safe_commit(db)
 
@@ -114,7 +113,7 @@ def create_user(
         user=admin,
         action="CREATE_USER",
         entity_type="user",
-        entity_id=user.id,
+        entity_id=str(user.id),
         details={"username": user.username, "role": user.role},
     )
 
@@ -126,16 +125,12 @@ def create_user(
     response_model=UserResponse,
     summary="Actualizar usuario",
     description="""
-Actualiza los datos de un usuario existente. Solo accesible por administradores.
+Actualiza los datos de perfil de un usuario existente. Solo accesible por administradores.
 
-**Campos actualizables:**
-- `full_name` — Nombre completo
-- `password` — Nueva contraseña (se hashea automáticamente)
-- `status` — Estado del usuario: `active`, `inactive`, `reported`
+**Campos actualizables:** `full_name`, `status`
 
-Solo los campos incluidos en el body serán actualizados. La acción queda registrada en auditoría.
+Para cambiar la contraseña, usar el panel de Supabase Auth o la API de Supabase.
 """,
-    response_description="Datos del usuario actualizado",
     responses={
         400: {"description": "Estado inválido"},
         401: {"description": "No autenticado"},
@@ -144,7 +139,7 @@ Solo los campos incluidos en el body serán actualizados. La acción queda regis
     },
 )
 def update_user(
-    user_id: int,
+    user_id: uuid.UUID,
     data: UserUpdate,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
@@ -159,8 +154,6 @@ def update_user(
         if data.status not in ("active", "inactive", "reported"):
             raise HTTPException(status_code=400, detail="Estado invalido")
         user.status = data.status
-    if data.password is not None:
-        user.password_hash = hash_password(data.password)
 
     safe_commit(db)
     db.refresh(user)
@@ -170,7 +163,7 @@ def update_user(
         user=admin,
         action="UPDATE_USER",
         entity_type="user",
-        entity_id=user.id,
+        entity_id=str(user.id),
         details={"updated_fields": [k for k, v in data.model_dump(exclude_unset=True).items()]},
     )
 
@@ -180,8 +173,7 @@ def update_user(
 @router.delete(
     "/{user_id}",
     summary="Eliminar usuario",
-    description="Elimina permanentemente un usuario del sistema. No se puede eliminar el propio usuario autenticado. La acción queda registrada en auditoría. Solo accesible por administradores.",
-    response_description="Confirmación de eliminación",
+    description="Elimina el usuario del sistema y de Supabase Auth. No se puede eliminar el propio usuario. Solo accesible por administradores.",
     responses={
         400: {"description": "No se puede eliminar el propio usuario"},
         401: {"description": "No autenticado"},
@@ -189,8 +181,8 @@ def update_user(
         404: {"description": "Usuario no encontrado"},
     },
 )
-def delete_user(
-    user_id: int,
+async def delete_user(
+    user_id: uuid.UUID,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
@@ -205,12 +197,17 @@ def delete_user(
     db.delete(user)
     safe_commit(db)
 
+    try:
+        await delete_supabase_auth_user(str(user_id))
+    except Exception:
+        pass
+
     audit = AuditService(db)
     audit.log(
         user=admin,
         action="DELETE_USER",
         entity_type="user",
-        entity_id=user_id,
+        entity_id=str(user_id),
         details={"username": username},
     )
 

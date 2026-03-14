@@ -1,33 +1,37 @@
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.database import Base
 
 
 class User(Base):
     """
-    Representa un usuario del sistema de gestión energética.
+    Perfil de usuario vinculado a Supabase Auth.
 
-    Existen dos roles con comportamientos distintos:
+    La autenticación (contraseña, sesión, tokens) es gestionada por Supabase Auth.
+    Este modelo almacena únicamente los datos de perfil y rol necesarios para
+    la lógica de negocio de la aplicación.
+
+    El campo `id` es el UUID asignado por Supabase Auth (auth.users.id),
+    lo que permite validar tokens JWT de Supabase y recuperar el perfil
+    en una sola consulta.
+
+    Roles:
         - 'admin': acceso total al sistema sin restricciones de permisos.
         - 'opersac': acceso limitado según los registros de la tabla `permissions`.
-          Solo puede operar sobre las funcionalidades que tenga habilitadas.
-
-    La contraseña nunca se almacena en texto plano; el campo `password_hash`
-    contiene el resultado del algoritmo de hashing configurado en la capa de
-    seguridad de la aplicación.
     """
 
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
-    # Hash de la contraseña; nunca almacenar la contraseña en texto plano
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    # Rol del usuario: 'admin' (acceso total) u 'opersac' (acceso según permisos)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(

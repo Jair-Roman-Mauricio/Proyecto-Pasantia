@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class UserCreate(BaseModel):
@@ -14,17 +15,21 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     status: Optional[str] = None
-    password: Optional[str] = None
 
 
 class UserResponse(BaseModel):
-    id: int
+    id: str  # UUID serializado como string
     username: str
     full_name: str
     role: str
     status: str
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def coerce_uuid(cls, v):
+        return str(v)
 
     class Config:
         from_attributes = True

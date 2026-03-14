@@ -1,79 +1,58 @@
-from datetime import datetime, timedelta, timezone
-
-import bcrypt
+import httpx
 from jose import JWTError, jwt
 
 from app.config import settings
 
-
-def hash_password(password: str) -> str:
-    """
-    Genera un hash seguro de la contraseña usando bcrypt con salt aleatorio.
-
-    Parámetros:
-        password: Contraseña en texto plano.
-
-    Retorna:
-        Cadena con el hash bcrypt listo para almacenar en la base de datos.
-    """
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+_jwks_cache: dict | None = None
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verifica si una contraseña en texto plano coincide con su hash almacenado.
-
-    Parámetros:
-        plain_password:  Contraseña ingresada por el usuario en el login.
-        hashed_password: Hash bcrypt almacenado en la base de datos.
-
-    Retorna:
-        True si la contraseña es correcta, False en caso contrario.
-    """
-    return bcrypt.checkpw(
-        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
-    )
-
-
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    """
-    Genera un token JWT firmado con los datos proporcionados.
-
-    Incluye automáticamente el campo de expiración (`exp`). Si no se especifica
-    `expires_delta`, se usa el valor configurado en ACCESS_TOKEN_EXPIRE_MINUTES.
-
-    Parámetros:
-        data:          Payload del token (debe incluir al menos `sub` con el ID del usuario).
-        expires_delta: Duración personalizada de validez del token.
-
-    Retorna:
-        Cadena con el token JWT codificado y firmado.
-    """
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+def _get_jwks() -> dict:
+    global _jwks_cache
+    if _jwks_cache is None:
+        url = f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+        print(f"[SUPABASE JWKS] Fetching from {url}")
+        try:
+            resp = httpx.get(url, timeout=5)
+            resp.raise_for_status()
+            _jwks_cache = resp.json()
+            print(f"[SUPABASE JWKS] OK — keys: {[k.get('kid') for k in _jwks_cache.get('keys', [])]}")
+        except Exception as e:
+            print(f"[SUPABASE JWKS] ERROR: {e}")
+            _jwks_cache = {"keys": []}
+    return _jwks_cache
 
 
-def decode_access_token(token: str) -> dict | None:
-    """
-    Decodifica y valida un token JWT.
-
-    Verifica la firma y la expiración usando la clave secreta configurada.
-
-    Parámetros:
-        token: Cadena JWT recibida en el header Authorization.
-
-    Retorna:
-        Diccionario con el payload si el token es válido, None si es inválido o expirado.
-    """
+def decode_supabase_token(token: str) -> dict | None:
     try:
-        payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg", "HS256")
+        kid = header.get("kid")
+        print(f"[SUPABASE JWT] alg={alg} kid={kid}")
+
+        if alg == "HS256":
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                options={"verify_aud": False},
+            )
+        else:
+            jwks = _get_jwks()
+            keys = jwks.get("keys", [])
+            # Buscar la clave que coincida con kid
+            key = next((k for k in keys if k.get("kid") == kid), keys[0] if keys else None)
+            if not key:
+                print("[SUPABASE JWT] No key found in JWKS")
+                return None
+            print(f"[SUPABASE JWT] Using key kid={key.get('kid')} kty={key.get('kty')}")
+            payload = jwt.decode(
+                token,
+                key,
+                algorithms=[alg],
+                options={"verify_aud": False},
+            )
+
         return payload
     except JWTError as e:
-        print(f"[JWT ERROR] {e}")
+        print(f"[SUPABASE JWT ERROR] {e}")
         return None

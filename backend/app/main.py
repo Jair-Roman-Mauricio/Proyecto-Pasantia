@@ -15,6 +15,14 @@ app = FastAPI(
 
 API REST para la administración de la infraestructura eléctrica de las **26 estaciones** de la Línea 1 del Metro de Lima.
 
+### Autenticación
+
+El login se realiza directamente con **Supabase Auth** desde el frontend.
+Todos los endpoints protegidos requieren el token JWT de Supabase en el header:
+```
+Authorization: Bearer <supabase_access_token>
+```
+
 ### Roles de usuario
 
 | Rol | Descripción |
@@ -22,52 +30,34 @@ API REST para la administración de la infraestructura eléctrica de las **26 es
 | **admin** | Acceso total: gestión de circuitos, aprobación de solicitudes, auditoría, backups |
 | **opersac** | Acceso limitado por permisos: puede enviar solicitudes, ver estaciones y reportes |
 
-### Autenticación
-
-Todos los endpoints (excepto `/auth/login`) requieren un token JWT en el header:
-```
-Authorization: Bearer <token>
-```
-
-Obtén el token en `POST /api/v1/auth/login`.
-
-### Permisos disponibles (opersac)
-
-- `view_stations` — Ver estaciones, barras y circuitos
-- `view_circuits` — Ver detalles de circuitos y sub-circuitos
-- `send_requests` — Enviar solicitudes de ampliación de carga
-- `add_observations` — Agregar observaciones a la infraestructura
-- `view_reports` — Acceder a reportes y exportación Excel
-
 ### Jerarquía de datos
 ```
 Estación → Barra (normal / emergencia / continuidad) → Circuito → Sub-circuito
 ```
     """,
-    version="1.1.6",
+    version="1.2.0",
     contact={"name": "Administración del Sistema", "email": "admin@linea1metro.pe"},
     license_info={"name": "Uso interno — Línea 1 Metro de Lima"},
     openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
     docs_url="/docs",
     openapi_tags=[
-        {"name": "Auth", "description": "Autenticación con JWT. Obtén tu token aquí antes de usar cualquier otro endpoint."},
+        {"name": "Auth", "description": "Verificación de sesión Supabase. El login ocurre en el frontend con supabase-js."},
         {"name": "Users", "description": "Gestión de usuarios del sistema. Solo accesible por administradores."},
-        {"name": "Stations", "description": "Estaciones de la Línea 1 (E01 Villa El Salvador → E26 Bayóvar). Requiere permiso `view_stations`."},
-        {"name": "Bars", "description": "Barras eléctricas de cada estación: normal, emergencia y continuidad. Requiere permiso `view_stations`."},
-        {"name": "Circuits", "description": "Circuitos eléctricos instalados en cada barra. Requiere permiso `view_circuits` para lectura, rol admin para escritura."},
-        {"name": "Sub-Circuits", "description": "Sub-circuitos (ampliaciones) dentro de un circuito existente. Solo admin puede crear/eliminar."},
-        {"name": "Requests", "description": "Solicitudes de ampliación de carga enviadas por operadores OPERSAC. Admin las aprueba o rechaza."},
-        {"name": "Observations", "description": "Notas y observaciones técnicas sobre circuitos, sub-circuitos o barras. Severidades: urgent, warning, recommendation."},
-        {"name": "Notifications", "description": "Alertas automáticas del sistema sobre reservas próximas a vencer sin contacto registrado. Solo admin."},
-        {"name": "Permissions", "description": "Control de acceso por feature para usuarios OPERSAC. Admin gestiona los permisos de cada usuario."},
-        {"name": "Audit", "description": "Log de todas las acciones realizadas en el sistema. Solo admin. Exportable a Excel."},
-        {"name": "Backups", "description": "Respaldos completos de la base de datos en formato JSON. Solo admin puede crear, restaurar o eliminar."},
-        {"name": "Reports", "description": "Reportes de demanda eléctrica y solicitudes por estación. Exportable a Excel con gráficos."},
-        {"name": "Images", "description": "Imágenes asociadas a estaciones, barras o circuitos (unifilares, fotos). Admin sube, todos ven."},
+        {"name": "Stations", "description": "Estaciones de la Línea 1 (E01 Villa El Salvador → E26 Bayóvar)."},
+        {"name": "Bars", "description": "Barras eléctricas de cada estación: normal, emergencia y continuidad."},
+        {"name": "Circuits", "description": "Circuitos eléctricos instalados en cada barra."},
+        {"name": "Sub-Circuits", "description": "Sub-circuitos (ampliaciones) dentro de un circuito existente."},
+        {"name": "Requests", "description": "Solicitudes de ampliación de carga enviadas por operadores OPERSAC."},
+        {"name": "Observations", "description": "Notas y observaciones técnicas sobre circuitos, sub-circuitos o barras."},
+        {"name": "Notifications", "description": "Alertas automáticas del sistema sobre reservas próximas a vencer. Solo admin."},
+        {"name": "Permissions", "description": "Control de acceso por feature para usuarios OPERSAC."},
+        {"name": "Audit", "description": "Log de todas las acciones realizadas en el sistema. Solo admin."},
+        {"name": "Backups", "description": "Respaldos completos de la base de datos en formato JSON. Solo admin."},
+        {"name": "Reports", "description": "Reportes de demanda eléctrica y solicitudes por estación."},
+        {"name": "Images", "description": "Imágenes asociadas a estaciones, barras o circuitos."},
     ],
 )
 
-# ── Middleware CORS — permite peticiones desde el frontend según la configuración ──
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -76,8 +66,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Handler global — captura cualquier excepcion no manejada y devuelve 500
-# en lugar de dejar caer el servidor
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
@@ -85,65 +74,45 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Error interno del servidor. Intente nuevamente."},
     )
 
-# ── Registro del router principal con el prefijo de versión de la API ──
+
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.on_event("startup")
-def on_startup():
-    # ── Inicialización de base de datos ──
-    # Crear tablas si no existen (solo en entorno de desarrollo)
+async def on_startup():
     Base.metadata.create_all(bind=engine)
-
-    # ── Seeding inicial — crea admin y estaciones si la BD está vacía ──
-    _seed_initial_data()
+    await _seed_initial_data()
 
     from app.services.notification_service import check_expiring_reserves
 
-    # ── Scheduler de notificaciones — verifica reservas próximas a vencer ──
     def run_reserve_check():
         db = SessionLocal()
         try:
             check_expiring_reserves(db)
         except Exception:
-            # Si falla, el scheduler no se desregistra y reintentara manana
             pass
         finally:
             db.close()
 
-    # Ejecutar verificación inmediata al iniciar
     run_reserve_check()
 
-    # Programar verificación diaria a las 08:00
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_reserve_check, "cron", hour=8, minute=0)
     scheduler.start()
 
 
-def _seed_initial_data():
+async def _seed_initial_data():
+    import uuid
     from sqlalchemy.orm import Session
     from app.database import SessionLocal
     from app.models.user import User
     from app.models.station import Station
     from app.models.bar import Bar
-    from app.utils.security import hash_password
     from app.utils.constants import STATIONS, BAR_TYPES
+    from app.utils.supabase_admin import create_supabase_auth_user
 
     db: Session = SessionLocal()
     try:
-        # Crear usuario admin por defecto si no existe ninguno en la BD
-        admin = db.query(User).filter(User.role == "admin").first()
-        if not admin:
-            admin = User(
-                username="admin",
-                password_hash=hash_password("admin123"),
-                full_name="Administrador del Sistema",
-                role="admin",
-                status="active",
-            )
-            db.add(admin)
-            db.commit()
-
         # Crear las 26 estaciones y sus 3 barras si la tabla está vacía
         count = db.query(Station).count()
         if count == 0:
@@ -152,7 +121,7 @@ def _seed_initial_data():
                     code=station_data["code"],
                     name=station_data["name"],
                     order_index=station_data["order_index"],
-                    transformer_capacity_kw=500,  # Default capacity
+                    transformer_capacity_kw=500,
                     max_demand_kw=0,
                     available_power_kw=500,
                     status="green",
@@ -160,7 +129,6 @@ def _seed_initial_data():
                 db.add(station)
             db.commit()
 
-            # Crear las 3 barras (normal, emergencia, continuidad) para cada estación
             stations = db.query(Station).all()
             for station in stations:
                 for bar_data in BAR_TYPES:
@@ -169,11 +137,35 @@ def _seed_initial_data():
                         name=bar_data["name"],
                         bar_type=bar_data["bar_type"],
                         status="operative",
-                        capacity_kw=200,   # Capacidad por defecto en kW
-                        capacity_a=300,    # Capacidad por defecto en amperios
+                        capacity_kw=200,
+                        capacity_a=300,
                     )
                     db.add(bar)
             db.commit()
+
+        # Crear usuario admin por defecto si no existe ninguno en la BD
+        admin = db.query(User).filter(User.role == "admin").first()
+        if not admin:
+            try:
+                supabase_user = await create_supabase_auth_user(
+                    email="admin@linea1metro.internal",
+                    password="admin123",
+                    username="admin",
+                    role="admin",
+                )
+                admin = User(
+                    id=uuid.UUID(supabase_user["id"]),
+                    username="admin",
+                    full_name="Administrador del Sistema",
+                    role="admin",
+                    status="active",
+                )
+                db.add(admin)
+                db.commit()
+                print("[SEED] Usuario admin creado correctamente.")
+            except Exception as e:
+                print(f"[SEED] No se pudo crear el admin en Supabase: {e}")
+                print("[SEED] Crea el usuario admin manualmente en Supabase Studio.")
 
     finally:
         db.close()

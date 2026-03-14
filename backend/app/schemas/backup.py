@@ -11,7 +11,7 @@ class BackupCreate(BaseModel):
 
 class BackupResponse(BaseModel):
     id: int
-    created_by: int
+    created_by: str
     creator_name: Optional[str] = None
     file_name: str
     description: Optional[str] = None

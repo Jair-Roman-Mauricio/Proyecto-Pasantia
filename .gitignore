@@ -18,3 +18,6 @@ Thumbs.db
 
 #Node Modules
 node_modules/
+
+# Script de deploy (contiene rutas locales de la clave SSH)
+deploy.sh

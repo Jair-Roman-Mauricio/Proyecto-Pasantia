@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import String, Boolean, Integer, DateTime, ForeignKey, UniqueConstraint
+import uuid
+
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.database import Base
 
@@ -28,7 +31,7 @@ class Permission(Base):
     __table_args__ = (UniqueConstraint("user_id", "feature_key"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     # Identificador de la funcionalidad controlada (p.ej. 'view_stations', 'send_requests')
     feature_key: Mapped[str] = mapped_column(String(50), nullable=False)
     # True si el usuario tiene acceso habilitado; False si está explícitamente denegado

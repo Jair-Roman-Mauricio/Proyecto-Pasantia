@@ -38,7 +38,7 @@ interface RequestRaw {
  *   - `toasts`  – arreglo de items de notificación listos para renderizar.
  *   - `dismiss` – función para eliminar un toast por su `id`.
  */
-export function useLoginNotifications(role: 'admin' | 'opersac' | undefined, userId?: number) {
+export function useLoginNotifications(role: 'admin' | 'opersac' | undefined, userId?: string) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const fetched = useRef(false);
   const userIdRef = useRef(userId);

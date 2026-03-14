@@ -9,10 +9,11 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://postgres:12345@localhost:5432/linea1metro"
 
-    # JWT
-    SECRET_KEY: str = "your-secret-key-change-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
+    # Supabase
+    SUPABASE_URL: str = "http://localhost:8000"
+    SUPABASE_ANON_KEY: str = "your-anon-key-here"
+    SUPABASE_SERVICE_ROLE_KEY: str = "your-service-role-key-here"
+    SUPABASE_JWT_SECRET: str = "your-jwt-secret-here"
 
     # Storage
     STORAGE_PATH: str = "storage"

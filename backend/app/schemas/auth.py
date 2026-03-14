@@ -1,22 +1,16 @@
-from pydantic import BaseModel
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: "UserBrief"
+from pydantic import BaseModel, field_validator
 
 
 class UserBrief(BaseModel):
-    id: int
+    id: str  # UUID serializado como string
     username: str
     full_name: str
     role: str
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def coerce_uuid(cls, v):
+        return str(v)
 
     class Config:
         from_attributes = True

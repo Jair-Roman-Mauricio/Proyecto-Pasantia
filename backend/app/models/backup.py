@@ -1,8 +1,11 @@
 from datetime import datetime, timezone
 from typing import Optional
 
+import uuid
+
 from sqlalchemy import String, Integer, Boolean, BigInteger, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.database import Base
 
@@ -25,8 +28,8 @@ class Backup(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     # Usuario administrador que generó el backup
-    created_by: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
