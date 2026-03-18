@@ -11,7 +11,7 @@
 | **Backend** | FastAPI (Python) | 0.115+ |
 | **ORM** | SQLAlchemy | 2.x |
 | **Base de datos** | PostgreSQL | 15 |
-| **Autenticación** | JWT (python-jose) | — |
+| **Autenticación** | Supabase Auth (JWT ES256/RS256/HS256) | — |
 | **Contenedores** | Docker + Docker Compose | — |
 | **Web server** | nginx (reverse proxy) | alpine |
 
@@ -141,11 +141,22 @@ Admin
 ### Flujo: Autenticación
 
 ```
-1. POST /auth/login → { access_token, user }
-2. Frontend guarda token en localStorage
-3. Axios interceptor añade "Authorization: Bearer <token>" a cada request
-4. GET /permissions/me → carga permisos del usuario
-5. Sidebar muestra solo opciones habilitadas
+1. LoginPage llama a supabase.auth.signInWithPassword({ email, password })
+   └── Supabase valida credenciales y devuelve { session: { access_token, ... } }
+
+2. authService.getMe(access_token) → GET /api/v1/auth/me
+   └── Backend decodifica el JWT (ES256/RS256 via JWKS o HS256 local)
+   └── Busca el usuario en la BD por sub (UUID de Supabase)
+   └── Devuelve { id, username, role, status, ... }
+
+3. Si rol = opersac: GET /api/v1/permissions/me → carga permisos por feature
+   └── Permisos se almacenan en AuthContext.user.permissions
+
+4. Axios interceptor lee token de AuthContext y añade "Authorization: Bearer <token>"
+
+5. Supabase renueva el token automáticamente (onAuthStateChange → TOKEN_REFRESHED)
+
+6. Sidebar filtra opciones según rol y permisos (hasPermission())
 ```
 
 ---
@@ -156,9 +167,11 @@ Admin
 
 ```env
 DATABASE_URL=postgresql://linea1user:linea1pass@db:5432/linea1metro
-SECRET_KEY=clave-secreta-para-jwt
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=480
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_ANON_KEY=eyJhbGci...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...   # Admin API — mantener secreta
+SUPABASE_JWT_SECRET=super-secret-jwt    # Solo para HS256 local; en producción usa JWKS
+STORAGE_PATH=storage
 CORS_ORIGINS=["http://localhost", "https://tu-dominio.duckdns.org"]
 PROJECT_NAME=Linea1Metro-API
 API_V1_PREFIX=/api/v1
@@ -201,7 +214,7 @@ docker compose restart backend
 
 Al iniciar el backend por primera vez, se crean automáticamente:
 
-- **1 usuario admin:** `admin` / `admin123`
+- **1 usuario admin** en Supabase Auth + en la BD local (si no existe ningún admin)
 - **26 estaciones** (E01 Villa El Salvador → E26 Bayóvar)
 - **78 barras** (3 por estación: normal, emergency, continuity)
 - Capacidad inicial del transformador: **500 kW** por estación

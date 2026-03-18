@@ -1,3 +1,8 @@
+/**
+ * Tabla de circuitos de una barra de distribución.
+ * En modo edición muestra el botón de eliminación; en modo lectura muestra el botón "Ver".
+ * Los circuitos UPS muestran un modal de selección de barra destino antes de navegar.
+ */
 import { useState } from 'react';
 import { Trash2, Eye } from 'lucide-react';
 import type { Circuit, Bar } from '../../types';
@@ -6,26 +11,41 @@ import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import DeleteCircuitModal from './DeleteCircuitModal';
 
+/** Props de la tabla de circuitos */
 interface CircuitTableProps {
+  /** Lista de circuitos a mostrar */
   circuits: Circuit[];
+  /** Cuando es true, reemplaza la columna de acciones por botones de eliminación */
   isEditMode: boolean;
+  /** Callback invocado tras eliminar un circuito para refrescar el estado padre */
   onDelete: () => void;
+  /** Callback para seleccionar un circuito y mostrar sus sub-circuitos */
   onView: (circuit: Circuit) => void;
+  /** Callback para navegar a la barra secundaria/terciaria de un circuito UPS */
   onNavigateToBar: (bar: Bar) => void;
+  /** Lista completa de barras de la estación (necesaria para resolver nombres UPS) */
   bars: Bar[];
+  /** Nombre de la barra mostrado en el modal de confirmación de eliminación */
   barName?: string;
+  /** Si es false, omite la columna de denominación (útil cuando se muestra en contexto de barra ya conocida) */
   showDenomination?: boolean;
 }
 
 export default function CircuitTable({ circuits, isEditMode, onDelete, onView, onNavigateToBar, bars, barName = '', showDenomination = true }: CircuitTableProps) {
   const [circuitToDelete, setCircuitToDelete] = useState<Circuit | null>(null);
+  // Almacena el circuito UPS sobre el que se está eligiendo la barra de destino
   const [upsCircuit, setUpsCircuit] = useState<Circuit | null>(null);
 
+  /** Busca el nombre legible de una barra por su ID; retorna cadena vacía si no se encuentra */
   const getBarName = (barId: number | null) => {
     if (!barId) return '';
     return bars.find((b) => b.id === barId)?.name || '';
   };
 
+  /**
+   * Gestiona el clic en "Ver" de un circuito.
+   * Si el circuito es UPS, abre el modal de selección de barra; si no, navega directamente.
+   */
   const handleView = (c: Circuit) => {
     if (c.is_ups) {
       setUpsCircuit(c);
@@ -34,6 +54,10 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, onView, o
     }
   };
 
+  /**
+   * Resuelve la elección de barra en el modal UPS y navega a la barra seleccionada.
+   * Recibe el ID de la barra secundaria o terciaria según la selección del usuario.
+   */
   const handleUpsChoice = (barId: number | null) => {
     if (!barId) return;
     const bar = bars.find((b) => b.id === barId);
@@ -43,6 +67,7 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, onView, o
     }
   };
 
+  // Columnas dinámicas según showDenomination e isEditMode
   const columns = [
     ...(showDenomination
       ? [{
@@ -89,6 +114,7 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, onView, o
         data={circuits}
         rowKey={(c) => c.id}
         rowClassName={(c) => {
+          // Colorea la fila según el estado de reserva para identificación visual rápida
           if (c.status === 'reserve_r') return 'bg-yellow-500/10';
           if (c.status === 'reserve_equipped_re') return 'bg-blue-500/10';
           return '';

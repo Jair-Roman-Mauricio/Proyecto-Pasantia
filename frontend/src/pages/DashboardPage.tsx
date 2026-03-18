@@ -22,6 +22,9 @@ export default function DashboardPage() {
     setActiveOption(toast.navigateTo);
   }, [setActiveOption]);
 
+  // Patrón de renderizado basado en la opción activa del sidebar.
+  // El sidebar almacena la opción en SidebarContext; al cambiar de sección
+  // se reemplaza el componente sin montar/desmontar el layout principal.
   const renderContent = () => {
     switch (activeOption) {
       case 'map':

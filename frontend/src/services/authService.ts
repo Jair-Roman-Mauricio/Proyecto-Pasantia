@@ -1,7 +1,23 @@
+/**
+ * @file authService.ts
+ * Servicio de autenticación que integra Supabase Auth con el backend propio.
+ * El flujo de login obtiene primero el token JWT de Supabase y luego lo usa
+ * para consultar el perfil enriquecido del usuario desde la API interna.
+ *
+ * Estrategia de email interno:
+ *   Los usernames se transforman a `{username}@linea1metro.internal` para
+ *   usar la autenticación por email de Supabase sin exponer emails reales.
+ */
+
 import { supabase } from '../config/supabaseClient';
 import api from '../config/api';
 import type { UserBrief } from '../types';
 
+/**
+ * Servicio de autenticación de la aplicación.
+ * Combina Supabase Auth (emisión de JWT) con el endpoint `/auth/me`
+ * del backend (perfil de usuario con rol y permisos).
+ */
 export const authService = {
   /**
    * Autentica al usuario contra Supabase Auth usando email interno.
@@ -31,6 +47,9 @@ export const authService = {
    * Si no se pasa token, el interceptor de Axios lo adjunta automáticamente.
    */
   async getMe(token?: string): Promise<UserBrief> {
+    // Si se pasa token explícitamente (p. ej. justo tras el login antes de guardarlo
+    // en contexto), se incluye en la cabecera; de lo contrario el interceptor de Axios
+    // lo adjunta automáticamente desde el estado de sesión de Supabase.
     const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
     const { data } = await api.get<UserBrief>('/auth/me', config);
     return data;

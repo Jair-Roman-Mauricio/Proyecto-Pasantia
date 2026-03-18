@@ -18,6 +18,9 @@ export default function StationDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>('unifilar');
   const [isLoading, setIsLoading] = useState(true);
 
+  // refreshStation se pasa a BarsCircuitsTab para que pueda actualizar
+  // los datos de la estación (ej: max_demand_kw) después de crear/eliminar circuitos,
+  // sin necesidad de recargar toda la página.
   const refreshStation = useCallback(() => {
     if (stationId) {
       stationService.getById(Number(stationId)).then(setStation);
@@ -44,6 +47,10 @@ export default function StationDetailPage() {
 
   if (!station) return null;
 
+  // Tres tabs disponibles para cada estación:
+  //   summary  → KPIs energéticos (capacidad, demanda, disponible, estado)
+  //   unifilar → Diagrama unifilar con imagen y circuitos superpuestos
+  //   bars     → Árbol completo Barra → Circuito → Sub-circuito con acciones de edición
   const tabs: { id: Tab; label: string }[] = [
     { id: 'summary', label: 'Resumen' },
     { id: 'unifilar', label: 'Mapa Unifilar' },

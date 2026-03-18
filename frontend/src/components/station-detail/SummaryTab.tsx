@@ -1,3 +1,8 @@
+/**
+ * Pestaña de resumen de una estación.
+ * Muestra la foto del transformador (con opción de carga/reemplazo para admins)
+ * y un gráfico de dona con la relación Potencia Consumida vs Potencia Disponible.
+ */
 import { useState, useEffect, useRef } from 'react';
 import { Upload, Camera } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -9,7 +14,9 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 
+/** Props de la pestaña de resumen de estación */
 interface SummaryTabProps {
+  /** Objeto de estación con los datos de potencia a visualizar */
   station: Station;
 }
 
@@ -20,10 +27,13 @@ export default function SummaryTab({ station }: SummaryTabProps) {
   const [showUpload, setShowUpload] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [justification, setJustification] = useState('');
+  // Incrementar imageKey fuerza el re-fetch de la imagen después de una subida
   const [imageKey, setImageKey] = useState(0);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  // Referencia a la URL blob anterior para revocarla y liberar memoria antes de asignar la nueva
   const prevBlobUrl = useRef<string | null>(null);
 
+  // Carga la imagen del transformador como blob para evitar problemas de CORS y caché del navegador
   useEffect(() => {
     let cancelled = false;
     api.get(`/images/transformer/${station.id}`, { responseType: 'blob' })
@@ -43,14 +53,20 @@ export default function SummaryTab({ station }: SummaryTabProps) {
   }, [station.id, imageKey]);
 
   const consumed = Number(station.max_demand_kw);
+  // Clampea en 0: si la demanda supera la capacidad el valor disponible sería negativo
   const available = Math.max(0, Number(station.available_power_kw));
 
+  // Datos del gráfico de dona: dos segmentos (consumido / disponible)
   const chartData = [
     { name: 'Potencia Consumida', value: consumed },
     { name: 'Potencia Disponible', value: available },
   ];
   const colors = ['#ef4444', '#22c55e'];
 
+  /**
+   * Sube la imagen del transformador al servidor usando multipart/form-data.
+   * Tras la subida exitosa incrementa imageKey para forzar un nuevo fetch de la imagen.
+   */
   const handleUpload = async () => {
     if (!selectedFile || !justification) return;
     const formData = new FormData();

@@ -1,3 +1,10 @@
+"""
+Enumeraciones del dominio para la aplicación Línea 1 Metro.
+
+Centraliza todos los valores válidos de campos de estado, tipo y severidad
+usados en modelos, schemas y lógica de negocio del backend.
+"""
+
 import enum
 
 

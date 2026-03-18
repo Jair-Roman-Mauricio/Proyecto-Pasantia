@@ -14,7 +14,7 @@ export default function UserTable() {
   const [users, setUsers] = useState<User[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [form, setForm] = useState({ username: '', password: '', full_name: '', role: 'opersac', status: 'active' });
+  const [form, setForm] = useState({ username: '', password: '', full_name: '', role: 'opersac', status: 'active', email: '', phone: '' });
   const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
@@ -41,13 +41,15 @@ export default function UserTable() {
         if (form.full_name) update.full_name = form.full_name;
         if (form.status) update.status = form.status;
         if (form.password) update.password = form.password;
+        if (form.email) update.email = form.email;
+        if (form.phone) update.phone = form.phone;
         await api.put(`/users/${editingUser.id}`, update);
       } else {
-        await api.post('/users', { username: form.username, password: form.password, full_name: form.full_name, role: form.role });
+        await api.post('/users', { username: form.username, password: form.password, full_name: form.full_name, role: form.role, email: form.email || undefined, phone: form.phone || undefined });
       }
       setShowForm(false);
       setEditingUser(null);
-      setForm({ username: '', password: '', full_name: '', role: 'opersac', status: 'active' });
+      setForm({ username: '', password: '', full_name: '', role: 'opersac', status: 'active', email: '', phone: '' });
       loadUsers();
     } catch (err: any) {
       // Muestra el mensaje de error del backend (ej: "El nombre de usuario ya existe")
@@ -74,7 +76,7 @@ export default function UserTable() {
 
   const openEdit = (u: User) => {
     setEditingUser(u);
-    setForm({ username: u.username, password: '', full_name: u.full_name, role: u.role, status: u.status });
+    setForm({ username: u.username, password: '', full_name: u.full_name, role: u.role, status: u.status, email: '', phone: '' });
     setShowForm(true);
   };
 
@@ -108,7 +110,7 @@ export default function UserTable() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-[var(--text-primary)]">Gestion de Usuarios</h2>
-        <Button size="sm" onClick={() => { setEditingUser(null); setForm({ username: '', password: '', full_name: '', role: 'opersac', status: 'active' }); setShowForm(true); }}>
+        <Button size="sm" onClick={() => { setEditingUser(null); setForm({ username: '', password: '', full_name: '', role: 'opersac', status: 'active', email: '', phone: '' }); setShowForm(true); }}>
           <Plus size={16} className="mr-1" /> Nuevo Usuario
         </Button>
       </div>
@@ -119,6 +121,8 @@ export default function UserTable() {
           {!editingUser && <Input label="Usuario" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />}
           <Input label="Nombre Completo" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
           <Input label={editingUser ? 'Nueva Contrasena (opcional)' : 'Contrasena'} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          <Input label="Correo personal (opcional)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Input label="Telefono (opcional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           {!editingUser && (
             <div>
               <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Rol</label>

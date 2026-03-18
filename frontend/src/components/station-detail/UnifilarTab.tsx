@@ -1,3 +1,8 @@
+/**
+ * Pestaña del mapa unifilar de una estación.
+ * Muestra la imagen del diagrama unifilar cargada en el servidor (si existe).
+ * Los administradores pueden subir o reemplazar la imagen con una justificación registrada.
+ */
 import { useState, useEffect, useRef } from 'react';
 import { Upload } from 'lucide-react';
 import type { Station } from '../../types';
@@ -8,7 +13,9 @@ import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Modal from '../ui/Modal';
 
+/** Props de la pestaña del mapa unifilar */
 interface UnifilarTabProps {
+  /** Estación cuyo diagrama unifilar se visualiza y gestiona */
   station: Station;
 }
 
@@ -17,11 +24,14 @@ export default function UnifilarTab({ station }: UnifilarTabProps) {
   const [showUpload, setShowUpload] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [justification, setJustification] = useState('');
+  // Incrementar imageKey fuerza un re-fetch de la imagen tras reemplazarla
   const [imageKey, setImageKey] = useState(0);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  // Guarda la URL blob anterior para revocarla al recibir la nueva y liberar memoria
   const prevBlobUrl = useRef<string | null>(null);
   const isAdmin = user?.role === 'admin';
 
+  // Obtiene la imagen del mapa unifilar como blob (evita CORS y problemas de caché)
   useEffect(() => {
     let cancelled = false;
     api.get(`/images/unifilar/${station.id}`, { responseType: 'blob' })
@@ -40,6 +50,10 @@ export default function UnifilarTab({ station }: UnifilarTabProps) {
     return () => { cancelled = true; };
   }, [station.id, imageKey]);
 
+  /**
+   * Envía la imagen del mapa unifilar al servidor con justificación de cambio.
+   * Tras la subida exitosa incrementa imageKey para disparar la recarga de la imagen.
+   */
   const handleUpload = async () => {
     if (!selectedFile || !justification) return;
     const formData = new FormData();

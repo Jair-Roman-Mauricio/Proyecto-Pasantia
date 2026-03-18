@@ -30,17 +30,24 @@ export default function AuditTable() {
 
   useEffect(() => { loadLogs(); }, []);
 
+  /**
+   * Construye el objeto de parámetros de query a partir de los filtros activos.
+   * El límite de 200 registros evita cargas excesivas en la vista; para análisis
+   * completos se recomienda usar la exportación Excel.
+   */
   const buildParams = () => {
     const params: Record<string, string> = { limit: '200' };
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
     if (actionFilter) params.action = actionFilter;
     if (entityFilter) params.entity_type = entityFilter;
+    // El filtro de destacados es ternario: vacío = todos, 'true' = solo destacados, 'false' = no destacados
     if (flaggedFilter === 'true') params.is_flagged = 'true';
     if (flaggedFilter === 'false') params.is_flagged = 'false';
     return params;
   };
 
+  /** Carga registros de auditoría usando los parámetros proporcionados o el límite por defecto */
   const loadLogs = async (params?: Record<string, string>) => {
     const { data } = await api.get('/audit', { params: params ?? { limit: '200' } });
     setLogs(data);
@@ -93,6 +100,10 @@ export default function AuditTable() {
     setFlagReason('');
   };
 
+  /**
+   * Exporta el historial completo de auditoría a Excel.
+   * Flujo: solicita blob al backend → URL temporal → clic programático → revocación de URL.
+   */
   const handleExportExcel = async () => {
     try {
       const response = await api.get('/audit/export/excel', { responseType: 'blob' });
@@ -101,6 +112,7 @@ export default function AuditTable() {
       link.href = url;
       link.download = 'auditoria.xlsx';
       link.click();
+      // Libera la URL temporal para evitar fugas de memoria
       window.URL.revokeObjectURL(url);
     } catch {
       alert('Error al exportar auditoria.');

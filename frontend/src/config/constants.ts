@@ -1,3 +1,13 @@
+/**
+ * @file constants.ts
+ * Constantes globales de dominio de la aplicación de Gestión Energética
+ * de la Línea 1 del Metro de Lima. Agrupa catálogos de estaciones, tipos de
+ * barra eléctrica, mapas de colores de estado y etiquetas de interfaz.
+ *
+ * Todos los valores son inmutables y se importan directamente donde se necesitan;
+ * no dependen de ningún estado ni contexto de React.
+ */
+
 // ---------------------------------------------------------------------------
 // Catálogo de estaciones de la Línea 1 del Metro de Lima
 // orderIndex sigue la numeración oficial: 1 = Villa El Salvador, 26 = Bayovar

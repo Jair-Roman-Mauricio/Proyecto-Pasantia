@@ -1,46 +1,68 @@
+/**
+ * Formulario modal para crear un nuevo sub-circuito dentro de un circuito padre.
+ * El campo MD se calcula automáticamente como PI × FD pero puede sobrescribirse manualmente.
+ * La fecha de vencimiento de reserva es obligatoria solo cuando el estado es de tipo reserva.
+ */
 import { useState } from 'react';
 import { circuitService } from '../../services/circuitService';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 
+/** Props del formulario de sub-circuito */
 interface SubCircuitFormProps {
+  /** ID del circuito padre al que pertenecerá el nuevo sub-circuito */
   circuitId: number;
+  /** Callback para cerrar el modal sin crear */
   onClose: () => void;
+  /** Callback invocado tras la creación exitosa del sub-circuito */
   onCreated: () => void;
 }
 
 export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCircuitFormProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  // ITM: especificación del interruptor termomagnético (ej. "3x20A")
   const [itm, setItm] = useState('');
+  // MM2: sección del conductor en mm² (ej. "4")
   const [mm2, setMm2] = useState('');
   const [piKw, setPiKw] = useState('');
+  // Factor de demanda; 1.0 significa que el circuito opera al 100% de la PI
   const [fd, setFd] = useState('1.0');
+  // MD puede ser ingresado manualmente o calculado automáticamente como PI × FD
   const [mdKw, setMdKw] = useState('');
   const [status, setStatus] = useState('operative_normal');
   const [reserveExpiresAt, setReserveExpiresAt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Determina si el estado actual requiere fecha de vencimiento de reserva
   const isReserve = status === 'reserve_r' || status === 'reserve_equipped_re';
   const today = new Date().toISOString().split('T')[0];
 
+  // Valores numéricos parseados para el cálculo automático de MD
   const piNum = parseFloat(piKw) || 0;
   const fdNum = parseFloat(fd) || 1;
+  // MD calculada automáticamente; se muestra como referencia aunque el campo sea editable
   const calculatedMd = (piNum * fdNum).toFixed(2);
 
+  /** Actualiza PI y recalcula MD automáticamente como PI × FD */
   const handlePiChange = (val: string) => {
     setPiKw(val);
     const pi = parseFloat(val) || 0;
     setMdKw((pi * fdNum).toFixed(2));
   };
 
+  /** Actualiza FD y recalcula MD automáticamente como PI × FD */
   const handleFdChange = (val: string) => {
     setFd(val);
     const f = parseFloat(val) || 1;
     setMdKw((piNum * f).toFixed(2));
   };
 
+  /**
+   * Valida los campos requeridos y envía el sub-circuito al servidor.
+   * MD usa el valor ingresado manualmente si existe; si no, usa el valor calculado.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !piKw) return;
@@ -57,6 +79,7 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
         mm2: mm2 || undefined,
         pi_kw: parseFloat(piKw),
         fd: parseFloat(fd),
+        // Si el usuario editó MD manualmente usa ese valor; si no, usa el calculado
         md_kw: parseFloat(mdKw) || parseFloat(calculatedMd),
         status,
         reserve_expires_at: isReserve ? reserveExpiresAt : undefined,

@@ -3,6 +3,18 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
+    """Configuración central de la aplicación leída desde variables de entorno.
+
+    Grupos de variables:
+    - General: nombre del proyecto y prefijo de la API.
+    - Database: cadena de conexión PostgreSQL (o SQLite para tests).
+    - Supabase: URL del proyecto, claves pública/service-role y secreto JWT
+      para verificar tokens. En producción se usa JWKS (ES256/RS256);
+      SUPABASE_JWT_SECRET sólo se usa en entornos locales con HS256.
+    - Storage: ruta local para imágenes y backups, y límite de tamaño.
+    - CORS: lista de orígenes permitidos por el middleware de FastAPI.
+    """
+
     PROJECT_NAME: str = "Linea 1 Metro - Sistema de Gestion Energetica"
     API_V1_PREFIX: str = "/api/v1"
 

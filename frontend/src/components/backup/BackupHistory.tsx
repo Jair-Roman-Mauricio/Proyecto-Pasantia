@@ -65,18 +65,8 @@ export default function BackupHistory() {
   const handlePgDump = async () => {
     setPgDumpLoading(true);
     try {
-      // Solicita el archivo como blob para poder crear una URL de descarga en el navegador
-      const response = await api.get('/backups/pgdump/download', { responseType: 'blob' });
-      // Crea una URL temporal en memoria que apunta al blob recibido
-      const url = URL.createObjectURL(response.data);
-      const a = document.createElement('a');
-      a.href = url;
-      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      a.download = `pgdump_${date}.sql`;
-      // Simula el click para disparar la descarga sin interacción del usuario
-      a.click();
-      // Libera la URL temporal para evitar fugas de memoria
-      URL.revokeObjectURL(url);
+      await api.post('/backups/pgdump');
+      await loadBackups();
     } finally {
       setPgDumpLoading(false);
     }
@@ -117,7 +107,7 @@ export default function BackupHistory() {
         <Button variant="ghost" size="sm" onClick={() => handleDownload(b)}>
           <Download size={14} className="mr-1" /> Descargar
         </Button>
-        <Button variant="secondary" size="sm" onClick={() => setShowRestore(b)}>
+        <Button variant="secondary" size="sm" onClick={() => setShowRestore(b)} disabled={b.file_name.startsWith('pgdump_')}>
           <RotateCcw size={14} className="mr-1" /> Restaurar
         </Button>
         <Button variant="danger" size="sm" onClick={() => setShowDelete(b)}>

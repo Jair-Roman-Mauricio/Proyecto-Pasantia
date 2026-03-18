@@ -12,6 +12,13 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // Flujo de login:
+  // 1. authService.login() llama a POST /api/v1/auth/login
+  //    que a su vez llama a supabase.auth.signInWithPassword()
+  // 2. El backend devuelve el access_token JWT de Supabase
+  // 3. AuthContext almacena el token y carga el perfil del usuario
+  // 4. Si el rol es 'opersac', también carga sus permisos desde /permissions/me
+  // 5. Redirige al dashboard; el sidebar filtra opciones según rol y permisos
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');

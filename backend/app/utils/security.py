@@ -7,6 +7,16 @@ _jwks_cache: dict | None = None
 
 
 def _get_jwks() -> dict:
+    """Descarga y cachea el JWKS de Supabase para verificar tokens ES256/RS256.
+
+    Llama a `<SUPABASE_URL>/auth/v1/.well-known/jwks.json` la primera vez y
+    almacena el resultado en `_jwks_cache`. Las llamadas siguientes devuelven
+    la caché sin volver a realizar el request HTTP.
+
+    Returns:
+        dict con la clave ``"keys"`` que contiene la lista de JWK públicas.
+        Si la descarga falla devuelve ``{"keys": []}``.
+    """
     global _jwks_cache
     if _jwks_cache is None:
         url = f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
@@ -23,6 +33,22 @@ def _get_jwks() -> dict:
 
 
 def decode_supabase_token(token: str) -> dict | None:
+    """Verifica y decodifica un JWT emitido por Supabase Auth.
+
+    Estrategia de verificación:
+    - Si el header del token indica ``alg=HS256``, decodifica usando
+      ``SUPABASE_JWT_SECRET`` (modo local / tests).
+    - Si el algoritmo es ES256 o RS256 (producción), descarga el JWKS de
+      Supabase y selecciona la clave pública cuyo ``kid`` coincida con el
+      header del token.
+
+    Args:
+        token: JWT en formato compacto (header.payload.signature).
+
+    Returns:
+        Diccionario con el payload del token si la firma es válida,
+        o ``None`` si el token está expirado, es inválido o no hay clave.
+    """
     try:
         header = jwt.get_unverified_header(token)
         alg = header.get("alg", "HS256")

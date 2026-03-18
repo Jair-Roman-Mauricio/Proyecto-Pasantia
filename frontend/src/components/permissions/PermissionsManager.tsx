@@ -33,7 +33,7 @@ export default function PermissionsManager() {
   // Lista de usuarios con rol opersac disponibles para seleccionar
   const [users, setUsers] = useState<User[]>([]);
   // ID del usuario opersac cuyo perfil de permisos se está editando
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   // Estado local de permisos del usuario seleccionado (una entrada por cada feature)
   const [permissions, setPermissions] = useState<PermissionState[]>([]);
   // Indica que el guardado está en curso (deshabilita el botón)
@@ -106,7 +106,7 @@ export default function PermissionsManager() {
       {/* Selector de usuario opersac; al cambiar dispara la carga y merge de permisos */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Seleccionar Opersac</label>
-        <select value={selectedUserId || ''} onChange={(e) => setSelectedUserId(Number(e.target.value))} className="w-64 px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]">
+        <select value={selectedUserId || ''} onChange={(e) => setSelectedUserId(e.target.value || null)} className="w-64 px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]">
           <option value="">Seleccione usuario</option>
           {users.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
         </select>

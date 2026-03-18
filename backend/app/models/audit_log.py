@@ -1,3 +1,11 @@
+"""
+Modelo SQLAlchemy para la tabla de registros de auditoría del sistema.
+
+Almacena todas las operaciones sensibles realizadas por los usuarios,
+preservando el contexto histórico de manera desnormalizada para garantizar
+la integridad del historial aunque los usuarios sean modificados o eliminados.
+"""
+
 import uuid
 from datetime import datetime, timezone
 from typing import Optional

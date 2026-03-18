@@ -1,12 +1,20 @@
+/**
+ * Tarjetas de resumen de potencia de un tablero (barra).
+ * Muestra cuatro métricas clave: PI total, MD total, capacidad máxima y potencia disponible.
+ * El color del ícono de "Potencia Disponible" cambia a rojo cuando el valor es negativo.
+ */
 import { Zap, Activity, Gauge, Battery } from 'lucide-react';
 import type { BarPowerSummary } from '../../types';
 import Card from '../ui/Card';
 
+/** Props del grupo de tarjetas de potencia */
 interface PowerCardsProps {
+  /** Resumen de potencia calculado por el servicio para la barra seleccionada */
   summary: BarPowerSummary;
 }
 
 export default function PowerCards({ summary }: PowerCardsProps) {
+  // Definición declarativa de las cuatro tarjetas; el color de Battery se evalúa en tiempo de render
   const cards = [
     {
       label: 'Potencia Instalada Total',

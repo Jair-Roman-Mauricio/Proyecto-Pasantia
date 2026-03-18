@@ -1,3 +1,10 @@
+"""
+Modelo SQLAlchemy para la tabla de permisos granulares de usuarios Opersac.
+
+Controla qué funcionalidades tiene habilitadas cada usuario con rol 'opersac'.
+Los administradores tienen acceso total y no requieren registros en esta tabla.
+"""
+
 from datetime import datetime, timezone
 
 import uuid

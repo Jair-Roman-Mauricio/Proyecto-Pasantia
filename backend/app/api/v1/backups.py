@@ -4,11 +4,14 @@ import json
 import os
 import shutil
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+
+PGDUMP_DIR = os.path.join(os.getenv("STORAGE_PATH", "storage"), "backups")
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -45,7 +48,9 @@ def _serialize_model(obj) -> dict:
     data = {}
     for col in obj.__table__.columns:
         val = getattr(obj, col.name)
-        if isinstance(val, datetime):
+        if isinstance(val, uuid.UUID):
+            val = str(val)
+        elif isinstance(val, datetime):
             val = val.isoformat()
         elif hasattr(val, "isoformat"):
             val = val.isoformat()
@@ -71,7 +76,7 @@ def get_backups(db: Session = Depends(get_db), _: User = Depends(require_admin))
         result.append(
             BackupResponse(
                 id=b.id,
-                created_by=b.created_by,
+                created_by=str(b.created_by),
                 creator_name=creator.full_name if creator else None,
                 file_name=b.file_name,
                 description=b.description,
@@ -139,7 +144,7 @@ def create_backup(
 
     return BackupResponse(
         id=backup.id,
-        created_by=backup.created_by,
+        created_by=str(backup.created_by),
         creator_name=admin.full_name,
         file_name=backup.file_name,
         description=backup.description,
@@ -164,6 +169,9 @@ def restore_backup(
     backup = db.query(Backup).filter(Backup.id == backup_id).first()
     if not backup:
         raise HTTPException(status_code=404, detail="Backup no encontrado")
+
+    if isinstance(backup.backup_data, dict) and backup.backup_data.get("type") == "pgdump":
+        raise HTTPException(status_code=400, detail="Los backups pg_dump no se pueden restaurar desde la app. Use psql para restaurarlos.")
 
     data = backup.backup_data
 
@@ -295,6 +303,81 @@ def download_pgdump(_: User = Depends(require_admin)):
     )
 
 
+@router.post(
+    "/pgdump",
+    response_model=BackupResponse,
+    status_code=201,
+    summary="Crear backup pg_dump",
+    description="Ejecuta pg_dump, guarda el archivo en disco y lo registra en el historial. Solo admin.",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 500: {"description": "Error al ejecutar pg_dump"}},
+)
+def create_pgdump_backup(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    parsed = urlparse(settings.DATABASE_URL)
+    host = parsed.hostname
+    port = str(parsed.port or 5432)
+    user = parsed.username
+    password = parsed.password or ""
+    dbname = parsed.path.lstrip("/")
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = password
+
+    pgdump = _find_pgdump()
+    result = subprocess.run(
+        [pgdump, "-h", host, "-p", port, "-U", user, "-d", dbname, "--no-owner", "--no-acl"],
+        capture_output=True,
+        env=env,
+    )
+
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=result.stderr.decode(errors="replace"))
+
+    os.makedirs(PGDUMP_DIR, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    file_name = f"pgdump_{timestamp}.sql"
+    file_path = os.path.join(PGDUMP_DIR, file_name)
+
+    with open(file_path, "wb") as f:
+        f.write(result.stdout)
+
+    size_bytes = len(result.stdout)
+
+    backup = Backup(
+        created_by=admin.id,
+        file_name=file_name,
+        description="pg_dump completo",
+        backup_data={"type": "pgdump", "file_path": file_path},
+        includes_audit=True,
+        size_bytes=size_bytes,
+    )
+    db.add(backup)
+    safe_commit(db)
+    db.refresh(backup)
+
+    audit = AuditService(db)
+    audit.log(
+        user=admin,
+        action="CREATE_PGDUMP_BACKUP",
+        entity_type="backup",
+        entity_id=backup.id,
+        details={"size_bytes": size_bytes},
+    )
+
+    return BackupResponse(
+        id=backup.id,
+        created_by=str(backup.created_by),
+        creator_name=admin.full_name,
+        file_name=backup.file_name,
+        description=backup.description,
+        includes_audit=backup.includes_audit,
+        size_bytes=backup.size_bytes,
+        created_at=backup.created_at,
+    )
+
+
 @router.get(
     "/{backup_id}/download",
     summary="Descargar backup",
@@ -309,6 +392,17 @@ def download_backup(
     backup = db.query(Backup).filter(Backup.id == backup_id).first()
     if not backup:
         raise HTTPException(status_code=404, detail="Backup no encontrado")
+
+    if isinstance(backup.backup_data, dict) and backup.backup_data.get("type") == "pgdump":
+        file_path = backup.backup_data["file_path"]
+        if not os.path.isfile(file_path):
+            raise HTTPException(status_code=404, detail="Archivo pg_dump no encontrado en disco")
+        return FileResponse(
+            file_path,
+            media_type="application/octet-stream",
+            filename=backup.file_name,
+        )
+
     content = json.dumps(backup.backup_data, ensure_ascii=False, indent=2).encode("utf-8")
     return StreamingResponse(
         io.BytesIO(content),

@@ -1,3 +1,11 @@
+"""
+Modelo SQLAlchemy para la tabla de backups del sistema.
+
+Cada registro representa un snapshot completo de la base de datos serializado
+en JSON, generado por un administrador para permitir la restauración del
+estado operativo del sistema ante errores o pérdida de datos.
+"""
+
 from datetime import datetime, timezone
 from typing import Optional
 

@@ -18,6 +18,9 @@ async def create_supabase_auth_user(
     password: str,
     username: str = "",
     role: str = "",
+    full_name: str = "",
+    phone: str = "",
+    contact_email: str = "",
 ) -> dict:
     """
     Crea un usuario en Supabase Auth (auth.users) vía la API Admin.
@@ -46,11 +49,50 @@ async def create_supabase_auth_user(
                 "email": email,
                 "password": password,
                 "email_confirm": True,
-                "user_metadata": {"username": username, "role": role},
+                **({"phone": phone} if phone else {}),
+                "user_metadata": {
+                    "username": username,
+                    "role": role,
+                    "full_name": full_name,
+                    **({"contact_email": contact_email} if contact_email else {}),
+                },
             },
         )
     response.raise_for_status()
     return response.json()
+
+
+async def update_supabase_auth_user(
+    user_uuid: str,
+    phone: str = "",
+    contact_email: str = "",
+) -> None:
+    """
+    Actualiza teléfono y/o correo de contacto de un usuario en Supabase Auth vía la API Admin.
+    """
+    payload: dict = {}
+    if phone:
+        payload["phone"] = phone
+    meta: dict = {}
+    if contact_email:
+        meta["contact_email"] = contact_email
+    if meta:
+        payload["user_metadata"] = meta
+
+    if not payload:
+        return
+
+    async with httpx.AsyncClient() as client:
+        response = await client.put(
+            f"{settings.SUPABASE_URL}/auth/v1/admin/users/{user_uuid}",
+            headers={
+                "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+    response.raise_for_status()
 
 
 async def delete_supabase_auth_user(user_uuid: str) -> None:

@@ -1,6 +1,14 @@
+/**
+ * Vista del manual de usuario del sistema.
+ * Muestra un conjunto de secciones con pasos numerados adaptado al rol del usuario:
+ *  - Admin:   cubre mapa, gestión de circuitos, solicitudes, notificaciones, backup, auditoría y reportes.
+ *  - Opersac: cubre mapa, solicitudes propias y reportes.
+ * En pantallas pequeñas la navegación usa un selector desplegable; en desktop usa un sidebar.
+ */
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
+/** Estructura de una sección del manual con sus pasos */
 interface Section {
   id: string;
   title: string;
@@ -116,9 +124,11 @@ const opersacSections: Section[] = [
 export default function GuideView() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  // Selecciona el conjunto de secciones adecuado según el rol del usuario autenticado
   const sections = isAdmin ? adminSections : opersacSections;
   const [activeSection, setActiveSection] = useState(sections[0].id);
 
+  // Fallback a la primera sección si la activa no se encuentra (ej. cambio de rol)
   const current = sections.find((s) => s.id === activeSection) ?? sections[0];
 
   return (

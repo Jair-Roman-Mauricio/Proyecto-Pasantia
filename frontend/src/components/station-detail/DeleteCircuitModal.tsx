@@ -1,3 +1,9 @@
+/**
+ * Modal de confirmación de eliminación de un circuito.
+ * Carga previamente los sub-circuitos del circuito a eliminar y los muestra en una tabla,
+ * advirtiendo al usuario que también serán eliminados en cascada.
+ * Ofrece la opción de descargar los sub-circuitos como Excel antes de confirmar la eliminación.
+ */
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import type { Circuit, SubCircuit } from '../../types';
@@ -7,10 +13,15 @@ import Table from '../ui/Table';
 import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
 
+/** Props del modal de eliminación de circuito */
 interface DeleteCircuitModalProps {
+  /** Circuito a eliminar; si es null el modal no renderiza nada */
   circuit: Circuit | null;
+  /** Nombre de la barra padre, mostrado en el mensaje de confirmación */
   barName: string;
+  /** Callback para cerrar sin eliminar */
   onCancel: () => void;
+  /** Callback invocado tras la eliminación exitosa */
   onConfirm: () => void;
 }
 
@@ -19,6 +30,7 @@ export default function DeleteCircuitModal({ circuit, barName, onCancel, onConfi
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Carga los sub-circuitos del circuito seleccionado para mostrar el impacto de la eliminación
   useEffect(() => {
     if (circuit) {
       setIsLoading(true);
@@ -43,6 +55,10 @@ export default function DeleteCircuitModal({ circuit, barName, onCancel, onConfi
     }
   };
 
+  /**
+   * Exporta los sub-circuitos del circuito a un archivo Excel (.xlsx) usando SheetJS.
+   * Permite al usuario conservar los datos antes de que sean eliminados en cascada.
+   */
   const handleDownloadExcel = () => {
     const data = subCircuits.map((s) => ({
       'Circuito': s.name,

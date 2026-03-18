@@ -1,83 +1,136 @@
-# Plantilla de Carga de Datos: Circuitos y Sub-circuitos
+# Plantilla SQL — Barras, Circuitos y Sub-circuitos
 
-Plantilla SQL para ingresar datos en la base de datos.
-Se usa **E14 — Arriola** como estación de ejemplo. Reemplazar el código de estación
-y los valores numéricos con los datos reales antes de ejecutar.
+Plantillas para escribir el script de carga de datos por estación.
+Reemplazar los valores en MAYÚSCULAS con los datos reales.
 
 ---
 
-## 1. Circuitos
+## 1. Barras
 
-Los circuitos se agrupan por tipo de barra: `normal`, `emergency` o `continuity`.
+Cada estación tiene exactamente 3 barras (una por tipo).
 
 ```sql
--- E14 — Arriola · BARRA NORMAL
-INSERT INTO circuits (bar_id, denomination, description, pi_kw, fd, md_kw, status)
+INSERT INTO bars (station_id, bar_type, name, capacity_kw, capacity_a, status)
 VALUES
-  ((SELECT id FROM bars WHERE station_id=(SELECT id FROM stations WHERE code='E14') AND bar_type='normal'),
-   'ESC-01', 'Escalera Mecanica Acceso A', 0.00, 0.70, 0.00, 'operative_normal'),
-  ((SELECT id FROM bars WHERE station_id=(SELECT id FROM stations WHERE code='E14') AND bar_type='normal'),
-   'ILU-01', 'Iluminacion Anden',          0.00, 1.00, 0.00, 'operative_normal');
-
--- E14 — Arriola · BARRA EMERGENCIA
-INSERT INTO circuits (bar_id, denomination, description, pi_kw, fd, md_kw, status)
-VALUES
-  ((SELECT id FROM bars WHERE station_id=(SELECT id FROM stations WHERE code='E14') AND bar_type='emergency'),
-   'IEM-01', 'Iluminacion Emergencia Anden', 0.00, 1.00, 0.00, 'operative_normal');
-
--- E14 — Arriola · BARRA CONTINUIDAD
-INSERT INTO circuits (bar_id, denomination, description, pi_kw, fd, md_kw, status)
-VALUES
-  ((SELECT id FROM bars WHERE station_id=(SELECT id FROM stations WHERE code='E14') AND bar_type='continuity'),
-   'CTL-01', 'Sistema de Control SCADA', 0.00, 0.90, 0.00, 'operative_normal');
+  ((SELECT id FROM stations WHERE code = 'CODIGO_ESTACION'), 'normal',      'NOMBRE_BARRA_NORMAL',      CAPACIDAD_KW, CAPACIDAD_A, 'operative'),
+  ((SELECT id FROM stations WHERE code = 'CODIGO_ESTACION'), 'emergency',   'NOMBRE_BARRA_EMERGENCIA',  CAPACIDAD_KW, CAPACIDAD_A, 'operative'),
+  ((SELECT id FROM stations WHERE code = 'CODIGO_ESTACION'), 'continuity',  'NOMBRE_BARRA_CONTINUIDAD', CAPACIDAD_KW, CAPACIDAD_A, 'operative');
 ```
 
-**Columnas:**
-
-| Columna en app | Campo SQL     | Ejemplo         |
-|----------------|---------------|-----------------|
-| Circuito       | `denomination`| `ESC-01`        |
-| Descripcion    | `description` | `Escalera Mecanica Acceso A` |
-| PI(kW)         | `pi_kw`       | `7.50`          |
-| F.D            | `fd`          | `0.70`          |
-| MD(kW)         | `md_kw`       | `5.25` (= PI × FD) |
+| Campo         | Descripción                                   |
+|---------------|-----------------------------------------------|
+| `station_id`  | ID de la estación (se obtiene por código)     |
+| `bar_type`    | `normal` · `emergency` · `continuity`         |
+| `name`        | Nombre descriptivo de la barra (texto libre)  |
+| `capacity_kw` | Capacidad máxima en kW (ej: `100.00`)         |
+| `capacity_a`  | Capacidad máxima en A (ej: `250.00`)          |
+| `status`      | `operative` (valor por defecto)               |
 
 ---
 
-## 2. Sub-circuitos
+## 2. Circuitos
+
+Un circuito pertenece a una barra. Repetir el bloque por cada tipo de barra que tenga circuitos.
 
 ```sql
--- Sub-circuitos del circuito ESC-01 · E14 — Arriola
-INSERT INTO sub_circuits (circuit_id, status, description, itm, mm2, pi_kw, fd, md_kw)
+INSERT INTO circuits (bar_id, denomination, description, pi_kw, fd, md_kw, status)
 VALUES
-  ((SELECT c.id FROM circuits c JOIN bars b ON c.bar_id=b.id JOIN stations s ON b.station_id=s.id WHERE s.code='E14' AND c.denomination='ESC-01'),
-   'operative_normal', 'Motor Escalera Tramo A',    '32A', '4',   0.00, 0.70, 0.00),
-  ((SELECT c.id FROM circuits c JOIN bars b ON c.bar_id=b.id JOIN stations s ON b.station_id=s.id WHERE s.code='E14' AND c.denomination='ESC-01'),
-   'operative_normal', 'Alumbrado Escalera Tramo A','16A', '2.5', 0.00, 1.00, 0.00);
+  (
+    (SELECT id FROM bars
+      WHERE station_id = (SELECT id FROM stations WHERE code = 'CODIGO_ESTACION')
+        AND bar_type = 'TIPO_BARRA'),
+    'DENOMINACION',   -- ej: ESC-01
+    'DESCRIPCION',    -- ej: Escalera Mecanica Acceso A
+    PI_KW,            -- ej: 7.50
+    FD,               -- ej: 0.70  (entre 0.00 y 1.00)
+    MD_KW,            -- ej: 5.25  (= PI_KW × FD)
+    'STATUS'          -- ver valores válidos abajo
+  ),
+  (
+    (SELECT id FROM bars
+      WHERE station_id = (SELECT id FROM stations WHERE code = 'CODIGO_ESTACION')
+        AND bar_type = 'TIPO_BARRA'),
+    'DENOMINACION',
+    'DESCRIPCION',
+    PI_KW,
+    FD,
+    MD_KW,
+    'STATUS'
+  );
 ```
 
-**Columnas:**
-
-| Columna en app | Campo SQL     | Ejemplo         |
-|----------------|---------------|-----------------|
-| Estado         | `status`      | `operative_normal` |
-| Circuito       | `description` | `Motor Escalera Tramo A` |
-| Descripcion    | `description` | (campo libre)   |
-| ITM            | `itm`         | `32A`           |
-| MM2            | `mm2`         | `4`             |
-| PI(kW)         | `pi_kw`       | `3.00`          |
-| F.D            | `fd`          | `0.70`          |
-| MD(kW)         | `md_kw`       | `2.10` (= PI × FD) |
+| Campo         | Descripción                                   |
+|---------------|-----------------------------------------------|
+| `bar_id`      | ID de la barra (se obtiene por estación+tipo) |
+| `denomination`| Código del circuito (ej: `ESC-01`)            |
+| `description` | Nombre descriptivo del circuito               |
+| `pi_kw`       | Potencia instalada en kW                      |
+| `fd`          | Factor de demanda (0.00 – 1.00)               |
+| `md_kw`       | Máxima demanda = `pi_kw × fd`                 |
+| `status`      | Ver tabla de valores válidos                  |
 
 ---
 
-## Referencia de valores válidos
+## 3. Sub-circuitos
 
-| Campo    | Valores aceptados |
-|----------|-------------------|
-| `bar_type` | `normal` · `emergency` · `continuity` |
-| `status` | `operative_normal` · `reserve_r` · `reserve_equipped_re` · `inactive` |
-| `fd`     | Decimal entre `0.00` y `1.00` |
-| `md_kw`  | `pi_kw × fd` |
-| `itm`    | Texto libre: `16A`, `32A`, `63A` … |
-| `mm2`    | Texto libre: `2.5`, `4`, `6`, `10` … |
+Un sub-circuito pertenece a un circuito.
+
+```sql
+INSERT INTO sub_circuits (circuit_id, status, denomination, description, itm, mm2, pi_kw, fd, md_kw)
+VALUES
+  (
+    (SELECT c.id FROM circuits c
+       JOIN bars b ON c.bar_id = b.id
+       JOIN stations s ON b.station_id = s.id
+      WHERE s.code = 'CODIGO_ESTACION'
+        AND c.denomination = 'DENOMINACION_CIRCUITO'),
+    'STATUS',         -- ver valores válidos abajo
+    'DENOMINACION',   -- ej: SC-01
+    'DESCRIPCION',    -- ej: Motor Escalera Tramo A
+    'ITM',            -- ej: 32A
+    'MM2',            -- ej: 4
+    PI_KW,            -- ej: 3.00
+    FD,               -- ej: 0.70
+    MD_KW             -- ej: 2.10  (= PI_KW × FD)
+  ),
+  (
+    (SELECT c.id FROM circuits c
+       JOIN bars b ON c.bar_id = b.id
+       JOIN stations s ON b.station_id = s.id
+      WHERE s.code = 'CODIGO_ESTACION'
+        AND c.denomination = 'DENOMINACION_CIRCUITO'),
+    'STATUS',
+    'DENOMINACION',
+    'DESCRIPCION',
+    'ITM',
+    'MM2',
+    PI_KW,
+    FD,
+    MD_KW
+  );
+```
+
+| Campo         | Descripción                                          |
+|---------------|------------------------------------------------------|
+| `circuit_id`  | ID del circuito padre (se obtiene por estación+código)|
+| `status`      | Ver tabla de valores válidos                         |
+| `denomination`| Código del sub-circuito (ej: `SC-01`)                |
+| `description` | Nombre descriptivo                                   |
+| `itm`         | Interruptor termomagnético (ej: `32A`)               |
+| `mm2`         | Sección del cable en mm² (ej: `4`)                   |
+| `pi_kw`       | Potencia instalada en kW                             |
+| `fd`          | Factor de demanda (0.00 – 1.00)                      |
+| `md_kw`       | Máxima demanda = `pi_kw × fd`                        |
+
+---
+
+## Valores válidos
+
+| Campo      | Opciones                                                               |
+|------------|------------------------------------------------------------------------|
+| `bar_type` | `normal` · `emergency` · `continuity`                                  |
+| `status`   | `operative_normal` · `reserve_r` · `reserve_equipped_re` · `inactive` |
+| `fd`       | Decimal entre `0.00` y `1.00`                                          |
+| `md_kw`    | Siempre `pi_kw × fd`                                                   |
+| `itm`      | Texto libre: `16A`, `32A`, `63A`, …                                    |
+| `mm2`      | Texto libre: `1.5`, `2.5`, `4`, `6`, `10`, …                          |

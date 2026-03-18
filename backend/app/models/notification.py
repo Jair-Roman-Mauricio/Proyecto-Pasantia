@@ -1,3 +1,10 @@
+"""
+Modelo SQLAlchemy para la tabla de notificaciones automáticas del sistema.
+
+Las notificaciones alertan al personal sobre eventos operativos relevantes
+como sobrecargas de transformadores o reservas próximas a vencer.
+"""
+
 from datetime import datetime, date, timezone
 from typing import Optional
 

@@ -1,3 +1,8 @@
+/**
+ * Tabla de sub-circuitos de un circuito padre.
+ * Muestra estado con indicador de color, datos eléctricos (ITM, MM2, PI, FD, MD)
+ * y, en modo edición, un botón de eliminación con confirmación del navegador.
+ */
 import { Trash2 } from 'lucide-react';
 import type { SubCircuit } from '../../types';
 import { CIRCUIT_STATUS_COLORS, CIRCUIT_STATUS_LABELS } from '../../config/constants';
@@ -5,13 +10,21 @@ import { circuitService } from '../../services/circuitService';
 import Table from '../ui/Table';
 import Button from '../ui/Button';
 
+/** Props de la tabla de sub-circuitos */
 interface SubCircuitTableProps {
+  /** Lista de sub-circuitos a mostrar */
   subCircuits: SubCircuit[];
+  /** Cuando es true, añade la columna de eliminación a la tabla */
   isEditMode: boolean;
+  /** Callback invocado tras eliminar un sub-circuito para refrescar el estado padre */
   onDelete: () => void;
 }
 
 export default function SubCircuitTable({ subCircuits, isEditMode, onDelete }: SubCircuitTableProps) {
+  /**
+   * Solicita confirmación nativa del navegador y elimina el sub-circuito.
+   * Tras la eliminación exitosa invoca onDelete para refrescar la vista padre.
+   */
   const handleDelete = async (sub: SubCircuit) => {
     if (!confirm(`Eliminar sub-circuito "${sub.name}"?`)) return;
     await circuitService.deleteSubCircuit(sub.id);

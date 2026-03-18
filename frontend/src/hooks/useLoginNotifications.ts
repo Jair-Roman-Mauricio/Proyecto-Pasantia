@@ -1,3 +1,11 @@
+/**
+ * @file useLoginNotifications.ts
+ * Hook personalizado que genera notificaciones toast al iniciar sesión, adaptadas
+ * al rol del usuario autenticado. Consulta el backend una sola vez por montaje y
+ * gestiona un timestamp de corte en `localStorage` para los operadores SAC,
+ * de modo que solo se muestran los cambios ocurridos desde la última sesión.
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import api from '../config/api';
 import type { ToastItem } from '../components/ui/LoginToast';

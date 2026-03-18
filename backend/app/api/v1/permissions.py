@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -47,7 +49,7 @@ def get_features(_: User = Depends(require_admin)):
     responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}},
 )
 def get_user_permissions(
-    user_id: int,
+    user_id: uuid.UUID,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
@@ -62,7 +64,7 @@ def get_user_permissions(
     responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Usuario no encontrado"}},
 )
 def update_user_permissions(
-    user_id: int,
+    user_id: uuid.UUID,
     data: PermissionsBulkUpdate,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),

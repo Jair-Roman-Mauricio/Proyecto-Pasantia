@@ -1,73 +1,135 @@
-# React + TypeScript + Vite
+# Frontend — Sistema de Gestión Energética · Línea 1 Metro de Lima
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interfaz web construida con **React + TypeScript + Vite** para visualizar y administrar la infraestructura eléctrica de las 26 estaciones de la Línea 1 del Metro de Lima.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Stack tecnológico
 
-## React Compiler
+| Capa | Tecnología |
+|---|---|
+| Framework UI | React 19 + TypeScript 5 |
+| Bundler | Vite 7 |
+| Estilos | Tailwind CSS 4 |
+| Estado/datos | TanStack React Query 5 |
+| Autenticación | Supabase JS (Auth) |
+| Gráficos | Recharts |
+| Iconos | Lucide React |
+| HTTP client | Axios |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Roles y vistas
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Rol | Acceso |
+|---|---|
+| `admin` | Todas las vistas: mapa, notificaciones, solicitudes, reportes, permisos, usuarios, backups, auditoría, guía |
+| `opersac` | Vistas habilitadas por permiso: mapa de estaciones, solicitudes propias, reportes, guía |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Los permisos (`view_stations`, `view_circuits`, `send_requests`, `add_observations`, `view_reports`) se cargan al iniciar sesión y filtran las opciones visibles en el sidebar.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Requisitos previos
+
+- Node.js 18+
+- Proyecto en [Supabase](https://supabase.com) (Auth habilitado)
+- Backend corriendo en `http://localhost:8000`
+
+---
+
+## Instalación
+
+```bash
+cd frontend
+
+# Instalar dependencias
+npm install
+
+# Configurar variables de entorno
+cp .env.example .env
+# Editar .env con los valores reales
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Variables de entorno
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Variable | Descripción |
+|---|---|
+| `VITE_API_BASE_URL` | URL base del backend · ej: `http://localhost:8000/api/v1` |
+| `VITE_SUPABASE_URL` | URL del proyecto Supabase · ej: `https://xxxx.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Clave anónima pública de Supabase |
+
+---
+
+## Comandos de desarrollo
+
+```bash
+# Servidor de desarrollo con HMR
+npm run dev          # http://localhost:5173
+
+# Verificación de tipos TypeScript
+npm run build        # compila + genera dist/
+
+# Lint
+npm run lint
 ```
+
+---
+
+## Estructura de carpetas
+
+```
+frontend/src/
+├── components/         # Componentes React organizados por dominio
+│   ├── audit/          # Tabla de logs de auditoría
+│   ├── backup/         # Historial de backups
+│   ├── guide/          # Vista de guía de usuario
+│   ├── layout/         # AppLayout, Sidebar, Header
+│   ├── notifications/  # Lista de notificaciones
+│   ├── permissions/    # Gestor de permisos por usuario
+│   ├── reports/        # Vista de reportes energéticos
+│   ├── requests/       # Tabla de solicitudes OPERSAC
+│   ├── station-detail/ # Tabs de detalle de estación (resumen, unifilar, barras)
+│   ├── station-map/    # Mapa de las 26 estaciones con estado energético
+│   ├── ui/             # Componentes base reutilizables (Button, Modal, Table, etc.)
+│   └── users/          # Gestión de usuarios (solo admin)
+├── config/
+│   ├── api.ts          # Instancia Axios con interceptor de Authorization
+│   └── supabaseClient.ts  # Cliente Supabase para Auth
+├── context/
+│   ├── AuthContext.tsx     # Sesión Supabase, perfil de usuario, permisos
+│   ├── SidebarContext.tsx  # Opción activa del sidebar
+│   └── ThemeContext.tsx    # Tema claro/oscuro
+├── hooks/              # Hooks personalizados (useLoginNotifications, etc.)
+├── pages/
+│   ├── DashboardPage.tsx      # Dashboard principal con renderContent()
+│   ├── LoginPage.tsx          # Formulario de login (Supabase Auth)
+│   └── StationDetailPage.tsx  # Detalle de estación con sistema de tabs
+├── services/           # Funciones de acceso a la API REST
+├── types/
+│   └── index.ts        # Tipos TypeScript de todas las entidades del sistema
+└── App.tsx             # Raíz: providers, QueryClient, rutas React Router
+```
+
+---
+
+## Flujo de autenticación
+
+1. El usuario ingresa `username` y `password` en `LoginPage`.
+2. `authService.login()` llama a `POST /api/v1/auth/login` que delega en Supabase.
+3. Se obtiene un `access_token` JWT que se almacena en `AuthContext`.
+4. Axios interceptor inyecta el token en cada request (`Authorization: Bearer ...`).
+5. Supabase renueva el token automáticamente (`onAuthStateChange`).
+
+---
+
+## Build para producción
+
+```bash
+npm run build
+# Genera dist/ — servir con nginx o cualquier servidor estático
+```
+
+El `Dockerfile.frontend` construye la imagen con nginx incluido como reverse proxy.

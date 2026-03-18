@@ -1,3 +1,8 @@
+/**
+ * Panel lateral deslizable que muestra el resumen de una estación seleccionada en el mapa.
+ * Incluye estado energético, gráfico de dona (Demanda vs Disponible) y detalles de potencia.
+ * Desde aquí el usuario puede navegar al detalle completo de la estación.
+ */
 import { useNavigate } from 'react-router-dom';
 import { X, Zap, Activity } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
@@ -6,8 +11,11 @@ import { STATION_STATUS_COLORS } from '../../config/constants';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 
+/** Props del panel lateral de estación */
 interface StationModalProps {
+  /** Estación a mostrar; si es null el componente no renderiza nada */
   station: Station | null;
+  /** Callback para cerrar el panel */
   onClose: () => void;
 }
 
@@ -16,7 +24,9 @@ export default function StationModal({ station, onClose }: StationModalProps) {
 
   if (!station) return null;
 
+  // Normaliza los valores a número para evitar comparaciones con strings del API
   const consumed = Number(station.max_demand_kw);
+  // Clampea en 0 para no mostrar valores negativos en el gráfico cuando la demanda supera la capacidad
   const available = Math.max(0, Number(station.available_power_kw));
   const chartData = [
     { name: 'Demanda', value: consumed },
@@ -24,6 +34,7 @@ export default function StationModal({ station, onClose }: StationModalProps) {
   ];
   const chartColors = ['#ef4444', '#22c55e'];
 
+  // Mapea el estado de string del API al color del Badge de UI
   const statusColor =
     station.status === 'red' ? 'red' : station.status === 'yellow' ? 'yellow' : 'green';
 
@@ -129,6 +140,7 @@ export default function StationModal({ station, onClose }: StationModalProps) {
         </div>
 
         {/* Action */}
+        {/* Cierra el panel antes de navegar para evitar que quede montado sobre la vista de detalle */}
         <Button
           className="w-full"
           onClick={() => { onClose(); navigate(`/stations/${station.id}`); }}

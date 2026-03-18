@@ -152,6 +152,7 @@ async def _seed_initial_data():
                     password="admin123",
                     username="admin",
                     role="admin",
+                    full_name="Administrador",
                 )
                 admin = User(
                     id=uuid.UUID(supabase_user["id"]),

@@ -1,3 +1,16 @@
+/**
+ * @file Sidebar.tsx
+ * Panel de navegación lateral de la aplicación. Muestra un menú diferente según
+ * el rol del usuario autenticado y el modo de vista activo (admin / opersac).
+ *
+ * Comportamiento responsive:
+ *   - En desktop (md+): posición estática, siempre visible.
+ *   - En móvil: drawer deslizable controlado por `mobileOpen` del SidebarContext.
+ *
+ * Los administradores pueden cambiar al "modo opersac" para ver la interfaz
+ * tal como la vería un operador SAC, sin abandonar su sesión.
+ */
+
 import {
   Map,
   Bell,

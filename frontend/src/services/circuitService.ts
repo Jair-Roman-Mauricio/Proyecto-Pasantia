@@ -1,3 +1,11 @@
+/**
+ * @file circuitService.ts
+ * Capa de acceso a datos para circuitos y subcircuitos eléctricos de las barras
+ * de la Línea 1 del Metro de Lima. Todas las funciones realizan llamadas HTTP
+ * a través de la instancia Axios configurada en `config/api` y devuelven promesas
+ * tipadas con las interfaces definidas en `types/index.ts`.
+ */
+
 import api from '../config/api';
 import type { Circuit, SubCircuit, BarPowerSummary } from '../types';
 

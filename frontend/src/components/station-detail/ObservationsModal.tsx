@@ -1,3 +1,9 @@
+/**
+ * Modal de observaciones para una barra o un circuito.
+ * Muestra el historial de observaciones con color de borde según severidad.
+ * Los usuarios con permiso 'add_observations' pueden agregar nuevas observaciones.
+ * Solo los administradores pueden eliminar observaciones existentes.
+ */
 import { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 import type { Observation } from '../../types';
@@ -7,9 +13,13 @@ import api from '../../config/api';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 
+/** Props del modal de observaciones */
 interface ObservationsModalProps {
+  /** ID de la barra cuyas observaciones se muestran (excluyente con circuitId) */
   barId?: number;
+  /** ID del circuito cuyas observaciones se muestran; tiene precedencia sobre barId */
   circuitId?: number;
+  /** Callback para cerrar el modal */
   onClose: () => void;
 }
 
@@ -19,8 +29,13 @@ export default function ObservationsModal({ barId, circuitId, onClose }: Observa
   const canAddObservations = hasPermission('add_observations');
   const [observations, setObservations] = useState<Observation[]>([]);
   const [content, setContent] = useState('');
+  // Nivel de severidad del nuevo comentario: 'recommendation' | 'warning' | 'urgent'
   const [severity, setSeverity] = useState('recommendation');
 
+  /**
+   * Carga observaciones del endpoint correcto según si el modal está en contexto
+   * de circuito (prioritario) o de barra.
+   */
   const loadObservations = async () => {
     const endpoint = circuitId
       ? `/observations/circuit/${circuitId}`
@@ -29,20 +44,24 @@ export default function ObservationsModal({ barId, circuitId, onClose }: Observa
     setObservations(res.data);
   };
 
+  // Recarga cuando cambia el contexto (diferente barra o circuito)
   useEffect(() => {
     loadObservations();
   }, [barId, circuitId]);
 
+  /** Elimina una observación por ID y recarga la lista (solo admins) */
   const handleDelete = async (id: number) => {
     await api.delete(`/observations/${id}`);
     loadObservations();
   };
 
+  /** Crea una nueva observación asociada al circuito o barra activo y recarga la lista */
   const handleSubmit = async () => {
     if (!content) return;
     await api.post('/observations', {
       content,
       severity,
+      // El backend acepta ambos campos; se envía el que aplica según el contexto actual
       circuit_id: circuitId || null,
       bar_id: barId || null,
     });

@@ -9,7 +9,7 @@ from app.models.user import User
 from app.models.permission import Permission
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services.audit_service import AuditService
-from app.utils.supabase_admin import create_supabase_auth_user, delete_supabase_auth_user
+from app.utils.supabase_admin import create_supabase_auth_user, delete_supabase_auth_user, update_supabase_auth_user
 from app.utils.constants import PERMISSION_FEATURES
 from app.utils.db_helpers import safe_commit
 
@@ -87,6 +87,9 @@ async def create_user(
             password=data.password,
             username=data.username,
             role=data.role,
+            full_name=data.full_name,
+            phone=data.phone or "",
+            contact_email=data.email or "",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear usuario en Supabase: {str(e)}")
@@ -138,7 +141,7 @@ Para cambiar la contraseña, usar el panel de Supabase Auth o la API de Supabase
         404: {"description": "Usuario no encontrado"},
     },
 )
-def update_user(
+async def update_user(
     user_id: uuid.UUID,
     data: UserUpdate,
     db: Session = Depends(get_db),
@@ -154,6 +157,16 @@ def update_user(
         if data.status not in ("active", "inactive", "reported"):
             raise HTTPException(status_code=400, detail="Estado invalido")
         user.status = data.status
+
+    if data.phone is not None or data.email is not None:
+        try:
+            await update_supabase_auth_user(
+                user_uuid=str(user.id),
+                phone=data.phone or "",
+                contact_email=data.email or "",
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al actualizar en Supabase: {str(e)}")
 
     safe_commit(db)
     db.refresh(user)

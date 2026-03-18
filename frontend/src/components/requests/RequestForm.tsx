@@ -1,3 +1,11 @@
+/**
+ * Formulario modal para que un opersac cree una solicitud de ampliación de carga.
+ * Soporta dos flujos:
+ *  1. Nuevo circuito en la barra: el usuario elige estación, barra y proporciona datos del circuito.
+ *  2. Nuevo sub-circuito en un circuito existente: el usuario selecciona además el circuito padre
+ *     y completa los datos adicionales del sub-circuito (ITM, MM2, etc.).
+ * Los selectores de barra y circuito son dependientes (se recargan en cascada al cambiar la estación).
+ */
 import { useState, useEffect } from 'react';
 import type { Station, Bar } from '../../types';
 import { stationService } from '../../services/stationService';
@@ -6,11 +14,15 @@ import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 
+/** Props del formulario de nueva solicitud */
 interface RequestFormProps {
+  /** Callback para cerrar el modal sin crear la solicitud */
   onClose: () => void;
+  /** Callback invocado tras la creación exitosa para refrescar la tabla padre */
   onCreated: () => void;
 }
 
+/** Etiquetas legibles en español para cada tipo de barra */
 const BAR_TYPE_LABELS: Record<string, string> = {
   normal: 'Normal',
   emergency: 'Emergencia',
@@ -37,10 +49,12 @@ export default function RequestForm({ onClose, onCreated }: RequestFormProps) {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Carga todas las estaciones al montar para poblar el primer selector
   useEffect(() => {
     stationService.getAll().then(setStations).catch(() => {});
   }, []);
 
+  // Al cambiar de estación, resetea barra, circuitos y carga las nuevas barras
   useEffect(() => {
     setBars([]);
     setBarType('');
@@ -51,6 +65,8 @@ export default function RequestForm({ onClose, onCreated }: RequestFormProps) {
     }
   }, [stationId]);
 
+  // Al cambiar el tipo de barra, carga los circuitos disponibles para esa barra
+  // El endpoint /requests/circuit-options retorna solo los circuitos operativos elegibles
   useEffect(() => {
     setCircuits([]);
     setCircuitId('');
@@ -62,11 +78,17 @@ export default function RequestForm({ onClose, onCreated }: RequestFormProps) {
     }
   }, [barType, bars, stationId]);
 
+  /**
+   * Valida los campos obligatorios y envía la solicitud al servidor.
+   * Los campos de sub-circuito se incluyen en el payload solo cuando hay un circuito
+   * padre seleccionado (circuitId != ''), evitando enviar datos vacíos al backend.
+   */
   const handleSubmit = async () => {
     if (!stationId || !barType || !loadKw) {
       setError('Complete los campos obligatorios');
       return;
     }
+    // Si se seleccionó un circuito padre, la denominación del sub-circuito es obligatoria
     if (circuitId && !subName) {
       setError('Ingrese la denominacion del sub-circuito');
       return;
@@ -88,7 +110,9 @@ export default function RequestForm({ onClose, onCreated }: RequestFormProps) {
         circuit_id: circuitId || null,
         local_item: localItem || null,
         requested_load_kw: parseFloat(loadKw),
+        // FD por defecto 1.0 si el usuario no ingresó un valor válido
         fd: parseFloat(fd) || 1.0,
+        // Los campos de sub-circuito se envían solo si se seleccionó un circuito padre
         sub_circuit_name: circuitId ? subName || null : null,
         sub_circuit_description: circuitId ? subDescription || null : null,
         sub_circuit_itm: circuitId ? subItm || null : null,

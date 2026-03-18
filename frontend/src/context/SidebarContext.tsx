@@ -1,3 +1,14 @@
+/**
+ * @file SidebarContext.tsx
+ * Contexto global que gestiona el estado del panel de navegación lateral.
+ * Expone el ítem activo, el modo de vista (admin/opersac), el estado colapsado
+ * y la visibilidad del drawer en dispositivos móviles.
+ *
+ * Exporta:
+ *   - `SidebarProvider` — proveedor que debe envolver el layout autenticado.
+ *   - `useSidebar`       — hook de acceso al contexto.
+ */
+
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
 /**
@@ -35,6 +46,10 @@ interface SidebarContextType {
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
+/**
+ * Proveedor del contexto del sidebar. Debe envolver el componente `AppLayout`
+ * (o cualquier subárbol que necesite acceder al estado de navegación lateral).
+ */
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [activeOption, setActiveOption] = useState('map');
   // viewMode determina qué conjunto de ítems de navegación se renderiza en el sidebar;

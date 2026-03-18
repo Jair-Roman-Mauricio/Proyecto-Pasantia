@@ -1,18 +1,23 @@
+/** Usuario completo devuelto por GET /users y GET /users/:id */
 export interface User {
-  id: string;  // UUID
+  id: string;  // UUID de Supabase Auth
   username: string;
   full_name: string;
+  /** 'admin' tiene acceso total; 'opersac' acceso limitado por permisos */
   role: 'admin' | 'opersac';
+  /** 'reported' bloquea el login sin eliminar el usuario */
   status: 'active' | 'inactive' | 'reported';
   created_at: string;
   updated_at: string;
 }
 
+/** Perfil resumido almacenado en AuthContext tras login */
 export interface UserBrief {
-  id: string;  // UUID
+  id: string;  // UUID de Supabase Auth
   username: string;
   full_name: string;
   role: string;
+  /** Mapa feature_key → is_allowed; solo presente para rol 'opersac' */
   permissions?: Record<string, boolean>;
 }
 
@@ -26,14 +31,21 @@ export interface LoginResponse {
   user: UserBrief;
 }
 
+/**
+ * Estación eléctrica (E01–E26).
+ * El status refleja la carga del transformador:
+ *   green  → disponible > 20% de transformer_capacity_kw
+ *   yellow → disponible ≤ 20%
+ *   red    → demanda > capacidad (sobrecarga)
+ */
 export interface Station {
   id: number;
-  code: string;
-  name: string;
+  code: string;       // Ej: "E01", "E26"
+  name: string;       // Ej: "Villa El Salvador", "Bayóvar"
   order_index: number;
   transformer_capacity_kw: number;
-  max_demand_kw: number;
-  available_power_kw: number;
+  max_demand_kw: number;      // Suma de md_kw de circuitos activos
+  available_power_kw: number; // transformer_capacity_kw - max_demand_kw
   status: 'red' | 'yellow' | 'green';
   created_at: string;
   updated_at: string;
@@ -60,18 +72,28 @@ export interface Bar {
   updated_at: string;
 }
 
+/**
+ * Circuito eléctrico dentro de una barra.
+ * md_kw = pi_kw × fd (demanda máxima)
+ *
+ * Estados:
+ *   operative_normal     → en operación (cuenta en la demanda)
+ *   reserve_r            → reserva sin equipar (cuenta en la demanda)
+ *   reserve_equipped_re  → reserva equipada (cuenta en la demanda)
+ *   inactive             → fuera de servicio (NO cuenta en la demanda)
+ */
 export interface Circuit {
   id: number;
   bar_id: number;
   secondary_bar_id: number | null;
   tertiary_bar_id: number | null;
-  denomination: string;
+  denomination: string;   // Código corto, ej: "ESC-01"
   name: string;
   description: string | null;
   local_item: string | null;
-  pi_kw: number;
-  fd: number;
-  md_kw: number;
+  pi_kw: number;    // Potencia instalada
+  fd: number;       // Factor de demanda (0–1)
+  md_kw: number;    // Demanda máxima = pi_kw × fd
   status: 'operative_normal' | 'reserve_r' | 'reserve_equipped_re' | 'inactive';
   is_ups: boolean;
   reserve_since: string | null;
@@ -98,6 +120,11 @@ export interface SubCircuit {
   updated_at: string;
 }
 
+/**
+ * Solicitud de ampliación de carga enviada por un usuario opersac.
+ * Si circuit_id es null → se crea un nuevo circuito al aprobar.
+ * Si circuit_id tiene valor → se crea un sub-circuito en ese circuito.
+ */
 export interface LoadRequest {
   id: number;
   opersac_user_id: string;  // UUID

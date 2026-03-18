@@ -1,3 +1,14 @@
+/**
+ * @file ThemeContext.tsx
+ * Contexto global de tema visual (claro / oscuro). Persiste la preferencia del
+ * usuario en `localStorage` y sincroniza la clase `dark` en `document.documentElement`
+ * para activar el modo oscuro de Tailwind CSS.
+ *
+ * Exporta:
+ *   - `ThemeProvider` — proveedor que debe envolver la raíz de la aplicación.
+ *   - `useTheme`       — hook de acceso al contexto.
+ */
+
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
 /**
