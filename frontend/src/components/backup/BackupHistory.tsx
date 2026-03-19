@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, RotateCcw, Trash2, Download, Database } from 'lucide-react';
+import { Plus, RotateCcw, Trash2, Download, Database, FileCode } from 'lucide-react';
 import api from '../../config/api';
 import type { Backup } from '../../types';
 import Table from '../ui/Table';
@@ -19,6 +19,10 @@ export default function BackupHistory() {
   const [showCreate, setShowCreate] = useState(false);
   // Indica que la exportación pg_dump está en curso (deshabilita el botón)
   const [pgDumpLoading, setPgDumpLoading] = useState(false);
+  // ID del backup cuya descarga SQL está en curso; null si no hay ninguna activa
+  const [sqlDownloadingId, setSqlDownloadingId] = useState<number | null>(null);
+  // Mensaje de error a mostrar si la descarga SQL falla
+  const [sqlError, setSqlError] = useState<string | null>(null);
   // Backup seleccionado para restaurar; null cuando el modal está cerrado
   const [showRestore, setShowRestore] = useState<Backup | null>(null);
   // Backup seleccionado para eliminar; null cuando el modal está cerrado
@@ -88,6 +92,44 @@ export default function BackupHistory() {
     URL.revokeObjectURL(url);
   };
 
+  /**
+   * Descarga el backup como un archivo .sql con sentencias INSERT.
+   * Solo disponible para backups JSON (no pg_dump).
+   * El SQL generado puede pegarse en el Supabase SQL Editor para restaurar datos.
+   */
+  const handleDownloadSql = async (b: Backup) => {
+    setSqlError(null);
+    setSqlDownloadingId(b.id);
+    try {
+      const response = await api.get(`/backups/${b.id}/download/sql`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = b.file_name.replace('.json', '.sql');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      // Con responseType:'blob', el cuerpo del error llega como Blob; hay que leerlo como texto
+      let msg = err?.message || 'Error al descargar SQL';
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const parsed = JSON.parse(text);
+          msg = parsed?.detail || text;
+        } catch {
+          msg = `HTTP ${err.response.status}`;
+        }
+      } else if (err?.response?.data?.detail) {
+        msg = err.response.data.detail;
+      }
+      setSqlError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setSqlDownloadingId(null);
+    }
+  };
+
   // Elimina permanentemente el backup seleccionado del servidor y recarga la lista
   const handleDelete = async () => {
     if (!showDelete) return;
@@ -103,10 +145,22 @@ export default function BackupHistory() {
     { key: 'description', header: 'Descripcion' },
     { key: 'size_bytes', header: 'Tamano', render: (b: Backup) => b.size_bytes ? `${(b.size_bytes / 1024).toFixed(1)} KB` : '-' },
     { key: 'actions', header: 'Acciones', render: (b: Backup) => (
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <Button variant="ghost" size="sm" onClick={() => handleDownload(b)}>
           <Download size={14} className="mr-1" /> Descargar
         </Button>
+        {/* Solo backups JSON admiten descarga SQL para importar en Supabase */}
+        {!b.file_name.startsWith('pgdump_') && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleDownloadSql(b)}
+            disabled={sqlDownloadingId === b.id}
+          >
+            <FileCode size={14} className="mr-1" />
+            {sqlDownloadingId === b.id ? 'Generando...' : 'Descargar SQL'}
+          </Button>
+        )}
         <Button variant="secondary" size="sm" onClick={() => setShowRestore(b)} disabled={b.file_name.startsWith('pgdump_')}>
           <RotateCcw size={14} className="mr-1" /> Restaurar
         </Button>
@@ -132,6 +186,15 @@ export default function BackupHistory() {
           </Button>
         </div>
       </div>
+
+      {/* Error de descarga SQL */}
+      {sqlError && (
+        <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            <strong>Error al descargar SQL:</strong> {sqlError}
+          </p>
+        </div>
+      )}
 
       {/* Tabla con el historial de backups y acciones por fila */}
       <Table columns={columns} data={backups} rowKey={(b) => b.id} />

@@ -45,8 +45,11 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
   const [selectedBar, setSelectedBar] = useState<Bar | null>(null);
   // Circuito actualmente seleccionado; al seleccionarlo se muestra la tabla de sub-circuitos
   const [selectedCircuit, setSelectedCircuit] = useState<Circuit | null>(null);
-  // Resumen de potencia (PI/MD/capacidad) de la barra seleccionada
-  const [powerSummary, setPowerSummary] = useState<BarPowerSummary | null>(null);
+  // Mapa de barraId → resumen de potencia; cada barra mantiene su propio valor independiente
+  const [powerSummaries, setPowerSummaries] = useState<Record<number, BarPowerSummary>>({});
+
+  // Resumen de potencia de la barra actualmente seleccionada
+  const powerSummary = selectedBar ? (powerSummaries[selectedBar.id] ?? null) : null;
   // Activa/desactiva el modo edición que habilita botones de cambio de estado y eliminación
   const [isEditMode, setIsEditMode] = useState(false);
   // Controla la visibilidad del modal de creación de nuevo circuito
@@ -84,6 +87,16 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
     }).catch(console.error).finally(() => setIsLoading(false));
   }, [station.id]);
 
+  /**
+   * Carga el resumen de potencia de una barra y lo guarda en el mapa por ID.
+   * Cada barra mantiene su propio valor, evitando que una sobreescriba a otra.
+   */
+  const loadBarPowerSummary = (barId: number) => {
+    circuitService.getBarPowerSummary(barId).then((summary) => {
+      setPowerSummaries((prev) => ({ ...prev, [barId]: summary }));
+    });
+  };
+
   // Al cambiar la barra seleccionada, carga sus circuitos y el resumen de potencia
   useEffect(() => {
     if (selectedBar) {
@@ -92,7 +105,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
           setBarCircuits((prev) => ({ ...prev, [selectedBar.id]: circuits }));
         });
       }
-      circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
+      loadBarPowerSummary(selectedBar.id);
     }
   }, [selectedBar, canViewCircuits]);
 
@@ -114,7 +127,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
       circuitService.getSubCircuits(selectedCircuit.id).then(setSubCircuits);
     }
     if (selectedBar) {
-      circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
+      loadBarPowerSummary(selectedBar.id);
       loadBarCircuits(selectedBar.id);
     }
     onStationChanged?.();
@@ -153,7 +166,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
   const handleCircuitCreated = () => {
     setShowCircuitForm(false);
     if (formBarId) loadBarCircuits(formBarId);
-    if (selectedBar) circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
+    if (selectedBar) loadBarPowerSummary(selectedBar.id);
     onStationChanged?.();
   };
 
@@ -179,7 +192,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
       const { data } = await api.put(`/bars/${selectedBar.id}/capacity`, { capacity_kw: kw, capacity_a: a });
       setBars((prev) => prev.map((b) => b.id === selectedBar.id ? { ...b, capacity_kw: data.capacity_kw, capacity_a: data.capacity_a } : b));
       setShowCapacityForm(false);
-      circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
+      loadBarPowerSummary(selectedBar.id);
     } catch {
       setCapacityError('Error al guardar la capacidad');
     }
@@ -189,7 +202,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
   const handleCircuitDeleted = () => {
     if (selectedBar) {
       loadBarCircuits(selectedBar.id);
-      circuitService.getBarPowerSummary(selectedBar.id).then(setPowerSummary);
+      loadBarPowerSummary(selectedBar.id);
     }
     onStationChanged?.();
   };
@@ -290,7 +303,7 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
                     <Button variant="ghost" size="sm" onClick={() => setIsEditMode(false)}>Salir Edicion</Button>
                   </>
                 )}
-                {isAdmin && !selectedCircuit && (
+                {isAdmin && (
                   <button
                     onClick={openCapacityForm}
                     title="Editar capacidad del tablero"
@@ -303,8 +316,30 @@ export default function BarsCircuitsTab({ station, onStationChanged }: BarsCircu
               </div>
             </div>
 
-            {/* Tarjetas de resumen de potencia (PI, MD, capacidad disponible) */}
-            {powerSummary && <PowerCards summary={powerSummary} />}
+            {/* Tarjetas de resumen de potencia (PI, MD, capacidad disponible).
+                Los totales PI y MD siempre se calculan a partir de los datos visibles
+                en la tabla, para que coincidan exactamente con la suma de las columnas:
+                - Vista de barra: suma de PI/MD de los circuitos de esa barra.
+                - Vista de circuito: suma de PI/MD de los sub-circuitos de ese circuito.
+                La capacidad del tablero y la potencia disponible usan la capacidad
+                configurada en la barra. */}
+            {powerSummary && (() => {
+              const circuits = barCircuits[selectedBar!.id] || [];
+              // Las barras de emergencia y continuidad aplican factor 0.75 sobre la MD total
+              const mdFactor = (selectedBar!.bar_type === 'emergency' || selectedBar!.bar_type === 'continuity') ? 0.75 : 1;
+              const circuitPI = circuits.reduce((sum, c) => sum + Number(c.pi_kw), 0);
+              const circuitMD = circuits.reduce((sum, c) => sum + Number(c.md_kw), 0) * mdFactor;
+              const subPI = subCircuits.reduce((sum, s) => sum + Number(s.pi_kw), 0);
+              const subMD = subCircuits.reduce((sum, s) => sum + Number(s.md_kw), 0) * mdFactor;
+              const cap = powerSummary.max_board_capacity_kw;
+              return (
+                <PowerCards summary={
+                  selectedCircuit
+                    ? { total_installed_power_kw: subPI, total_max_demand_kw: subMD, max_board_capacity_kw: cap, max_board_capacity_a: powerSummary.max_board_capacity_a, available_power_kw: cap - subMD }
+                    : { total_installed_power_kw: circuitPI, total_max_demand_kw: circuitMD, max_board_capacity_kw: cap, max_board_capacity_a: powerSummary.max_board_capacity_a, available_power_kw: cap - circuitMD }
+                } />
+              );
+            })()}
 
             {canViewCircuits && (
               // Si hay un circuito seleccionado muestra sus sub-circuitos; si no, muestra los circuitos de la barra

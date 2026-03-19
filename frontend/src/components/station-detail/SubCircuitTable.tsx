@@ -1,14 +1,16 @@
 /**
  * Tabla de sub-circuitos de un circuito padre.
  * Muestra estado con indicador de color, datos eléctricos (ITM, MM2, PI, FD, MD)
- * y, en modo edición, un botón de eliminación con confirmación del navegador.
+ * y, en modo edición, botones de edición (✏️) y eliminación (🗑).
  */
-import { Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Trash2, Pencil } from 'lucide-react';
 import type { SubCircuit } from '../../types';
 import { CIRCUIT_STATUS_COLORS, CIRCUIT_STATUS_LABELS } from '../../config/constants';
 import { circuitService } from '../../services/circuitService';
 import Table from '../ui/Table';
 import Button from '../ui/Button';
+import SubCircuitForm from './SubCircuitForm';
 
 /** Props de la tabla de sub-circuitos */
 interface SubCircuitTableProps {
@@ -21,6 +23,9 @@ interface SubCircuitTableProps {
 }
 
 export default function SubCircuitTable({ subCircuits, isEditMode, onDelete }: SubCircuitTableProps) {
+  // Sub-circuito seleccionado para editar; al asignarlo abre SubCircuitForm en modo edición
+  const [editingSubCircuit, setEditingSubCircuit] = useState<SubCircuit | null>(null);
+
   /**
    * Solicita confirmación nativa del navegador y elimina el sub-circuito.
    * Tras la eliminación exitosa invoca onDelete para refrescar la vista padre.
@@ -61,19 +66,36 @@ export default function SubCircuitTable({ subCircuits, isEditMode, onDelete }: S
           key: 'actions',
           header: 'Acciones',
           render: (s: SubCircuit) => (
-            <Button variant="danger" size="sm" onClick={() => handleDelete(s)}>
-              <Trash2 size={14} />
-            </Button>
+            <div className="flex gap-1">
+              {/* Botón editar: abre SubCircuitForm pre-llenado con los datos del sub-circuito */}
+              <Button variant="ghost" size="sm" onClick={() => setEditingSubCircuit(s)} title="Editar sub-circuito">
+                <Pencil size={14} />
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => handleDelete(s)} title="Eliminar sub-circuito">
+                <Trash2 size={14} />
+              </Button>
+            </div>
           ),
         }]
       : []),
   ];
 
   return (
-    <Table
-      columns={columns}
-      data={subCircuits}
-      rowKey={(s) => s.id}
-    />
+    <>
+      <Table
+        columns={columns}
+        data={subCircuits}
+        rowKey={(s) => s.id}
+      />
+      {/* Modal de edición: se abre al hacer clic en el botón lápiz de una fila en modo edición */}
+      {editingSubCircuit && (
+        <SubCircuitForm
+          circuitId={editingSubCircuit.circuit_id}
+          editingSubCircuit={editingSubCircuit}
+          onClose={() => setEditingSubCircuit(null)}
+          onCreated={() => { setEditingSubCircuit(null); onDelete(); }}
+        />
+      )}
+    </>
   );
 }

@@ -1,9 +1,12 @@
 /**
- * Formulario modal para crear un nuevo sub-circuito dentro de un circuito padre.
+ * Formulario modal para crear o editar un sub-circuito dentro de un circuito padre.
+ * - Modo creación (editingSubCircuit ausente): usa POST /sub-circuits/circuit/{circuitId}
+ * - Modo edición (editingSubCircuit presente): usa PUT /sub-circuits/{id}, pre-llena todos los campos
  * El campo MD se calcula automáticamente como PI × FD pero puede sobrescribirse manualmente.
  * La fecha de vencimiento de reserva es obligatoria solo cuando el estado es de tipo reserva.
  */
 import { useState } from 'react';
+import type { SubCircuit } from '../../types';
 import { circuitService } from '../../services/circuitService';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
@@ -13,26 +16,30 @@ import Button from '../ui/Button';
 interface SubCircuitFormProps {
   /** ID del circuito padre al que pertenecerá el nuevo sub-circuito */
   circuitId: number;
-  /** Callback para cerrar el modal sin crear */
+  /** Callback para cerrar el modal sin guardar */
   onClose: () => void;
-  /** Callback invocado tras la creación exitosa del sub-circuito */
+  /** Callback invocado tras la creación o edición exitosa del sub-circuito */
   onCreated: () => void;
+  /** Si se provee, el formulario opera en modo edición pre-llenando los campos con los datos del sub-circuito */
+  editingSubCircuit?: SubCircuit;
 }
 
-export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCircuitFormProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+export default function SubCircuitForm({ circuitId, onClose, onCreated, editingSubCircuit }: SubCircuitFormProps) {
+  const isEditMode = !!editingSubCircuit;
+
+  const [name, setName] = useState(editingSubCircuit?.name ?? '');
+  const [description, setDescription] = useState(editingSubCircuit?.description ?? '');
   // ITM: especificación del interruptor termomagnético (ej. "3x20A")
-  const [itm, setItm] = useState('');
+  const [itm, setItm] = useState(editingSubCircuit?.itm ?? '');
   // MM2: sección del conductor en mm² (ej. "4")
-  const [mm2, setMm2] = useState('');
-  const [piKw, setPiKw] = useState('');
+  const [mm2, setMm2] = useState(editingSubCircuit?.mm2 ?? '');
+  const [piKw, setPiKw] = useState(editingSubCircuit ? String(editingSubCircuit.pi_kw) : '');
   // Factor de demanda; 1.0 significa que el circuito opera al 100% de la PI
-  const [fd, setFd] = useState('1.0');
+  const [fd, setFd] = useState(editingSubCircuit ? String(editingSubCircuit.fd) : '1.0');
   // MD puede ser ingresado manualmente o calculado automáticamente como PI × FD
-  const [mdKw, setMdKw] = useState('');
-  const [status, setStatus] = useState('operative_normal');
-  const [reserveExpiresAt, setReserveExpiresAt] = useState('');
+  const [mdKw, setMdKw] = useState(editingSubCircuit ? String(editingSubCircuit.md_kw) : '');
+  const [status, setStatus] = useState(editingSubCircuit?.status ?? 'operative_normal');
+  const [reserveExpiresAt, setReserveExpiresAt] = useState(editingSubCircuit?.reserve_expires_at ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Determina si el estado actual requiere fecha de vencimiento de reserva
@@ -61,6 +68,8 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
 
   /**
    * Valida los campos requeridos y envía el sub-circuito al servidor.
+   * - Modo creación: POST /sub-circuits/circuit/{circuitId}
+   * - Modo edición: PUT /sub-circuits/{id}
    * MD usa el valor ingresado manualmente si existe; si no, usa el valor calculado.
    */
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,7 +81,7 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
     if (mdKw && parseFloat(mdKw) < 0) return;
     setIsSubmitting(true);
     try {
-      await circuitService.createSubCircuit(circuitId, {
+      const payload = {
         name,
         description: description || undefined,
         itm: itm || undefined,
@@ -83,17 +92,23 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
         md_kw: parseFloat(mdKw) || parseFloat(calculatedMd),
         status,
         reserve_expires_at: isReserve ? reserveExpiresAt : undefined,
-      });
+      };
+
+      if (isEditMode && editingSubCircuit) {
+        await circuitService.updateSubCircuit(editingSubCircuit.id, payload);
+      } else {
+        await circuitService.createSubCircuit(circuitId, payload);
+      }
       onCreated();
     } catch (error) {
-      console.error('Error creating sub-circuit:', error);
+      console.error(isEditMode ? 'Error updating sub-circuit:' : 'Error creating sub-circuit:', error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Agregar Sub-circuito" size="md">
+    <Modal isOpen onClose={onClose} title={isEditMode ? 'Editar Sub-circuito' : 'Agregar Sub-circuito'} size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Denominacion *"
@@ -180,7 +195,7 @@ export default function SubCircuitForm({ circuitId, onClose, onCreated }: SubCir
         <div className="flex gap-2 justify-end">
           <Button variant="secondary" type="button" onClick={onClose}>Cancelar</Button>
           <Button type="submit" disabled={!name || !piKw || (isReserve && !reserveExpiresAt) || isSubmitting}>
-            {isSubmitting ? 'Creando...' : 'Crear Sub-circuito'}
+            {isSubmitting ? (isEditMode ? 'Guardando...' : 'Creando...') : (isEditMode ? 'Guardar cambios' : 'Crear Sub-circuito')}
           </Button>
         </div>
       </form>

@@ -11,33 +11,39 @@ interface CircuitFormProps {
   bars: Bar[];
   onClose: () => void;
   onCreated: () => void;
+  /** Si se provee, el formulario opera en modo edición pre-llenando los campos con los datos del circuito */
+  editingCircuit?: Circuit;
 }
 
 /**
- * Formulario modal para crear un nuevo circuito en una barra dada.
+ * Formulario modal para crear o editar un circuito en una barra dada.
+ * - Modo creación (editingCircuit ausente): usa POST /circuits/bar/{barId}
+ * - Modo edición (editingCircuit presente): usa PUT /circuits/{id}, pre-llena todos los campos
  * Incluye cálculo automático de MD, validación de fecha de reserva
  * y configuración de barras secundaria/terciaria para circuitos UPS.
  */
-export default function CircuitForm({ barId, bars, onClose, onCreated }: CircuitFormProps) {
-  const [denomination, setDenomination] = useState('');
-  const [name, setName] = useState('');
-  const [status, setStatus] = useState('operative_normal');
+export default function CircuitForm({ barId, bars, onClose, onCreated, editingCircuit }: CircuitFormProps) {
+  const isEditMode = !!editingCircuit;
+
+  const [denomination, setDenomination] = useState(editingCircuit?.denomination ?? '');
+  const [name, setName] = useState(editingCircuit?.name ?? '');
+  const [status, setStatus] = useState(editingCircuit?.status ?? 'operative_normal');
   // Fecha de vencimiento de la reserva; solo aplica cuando el estado es reserve_r o reserve_equipped_re
-  const [reserveExpiresAt, setReserveExpiresAt] = useState('');
-  const [description, setDescription] = useState('');
+  const [reserveExpiresAt, setReserveExpiresAt] = useState(editingCircuit?.reserve_expires_at ?? '');
+  const [description, setDescription] = useState(editingCircuit?.description ?? '');
   // Potencia instalada en kW (PI); junto con FD determina la MD
-  const [piKw, setPiKw] = useState('');
+  const [piKw, setPiKw] = useState(editingCircuit ? String(editingCircuit.pi_kw) : '');
   // Factor de demanda (FD); valor por defecto 1.0 representa uso al 100%
-  const [fd, setFd] = useState('1.0');
+  const [fd, setFd] = useState(editingCircuit ? String(editingCircuit.fd) : '1.0');
   // Indica si el circuito está alimentado por un UPS (requiere dos barras de conexión)
-  const [isUps, setIsUps] = useState(false);
+  const [isUps, setIsUps] = useState(editingCircuit?.is_ups ?? false);
   // Barra secundaria de conexión UPS (Conexion 1)
-  const [secondaryBarId, setSecondaryBarId] = useState<number | null>(null);
+  const [secondaryBarId, setSecondaryBarId] = useState<number | null>(editingCircuit?.secondary_bar_id ?? null);
   // Barra terciaria de conexión UPS (Conexion 2); no puede coincidir con la secundaria
-  const [tertiaryBarId, setTertiaryBarId] = useState<number | null>(null);
+  const [tertiaryBarId, setTertiaryBarId] = useState<number | null>(editingCircuit?.tertiary_bar_id ?? null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Mensaje de advertencia del backend cuando la creación requiere confirmación forzada
+  // Mensaje de advertencia del backend cuando la creación requiere confirmación forzada (solo en modo creación)
   const [forceMessage, setForceMessage] = useState<string | null>(null);
   // Payload guardado temporalmente mientras el usuario decide si confirmar la creación forzada
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
@@ -115,17 +121,22 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
     const payload = buildPayload();
 
     try {
-      await circuitService.create(barId, payload as Partial<Circuit> & { force?: boolean });
+      if (isEditMode && editingCircuit) {
+        // Modo edición: actualizar el circuito existente vía PUT
+        await circuitService.update(editingCircuit.id, payload as Partial<Circuit>);
+      } else {
+        // Modo creación: crear nuevo circuito vía POST
+        await circuitService.create(barId, payload as Partial<Circuit> & { force?: boolean });
+      }
       onCreated();
     } catch (err: any) {
       const detail = err.response?.data?.detail;
-      // Si el backend requiere confirmación explícita (ej. superar capacidad del tablero),
-      // se guarda el payload y se muestra el modal de confirmación forzada
-      if (detail?.requires_force) {
+      // La confirmación forzada solo aplica en modo creación (superar capacidad del tablero)
+      if (!isEditMode && detail?.requires_force) {
         setPendingPayload(payload);
         setForceMessage(detail.message);
       } else {
-        setError(typeof detail === 'string' ? detail : 'Error al crear el circuito');
+        setError(typeof detail === 'string' ? detail : isEditMode ? 'Error al guardar los cambios' : 'Error al crear el circuito');
       }
     } finally {
       setIsSubmitting(false);
@@ -156,7 +167,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
 
   return (
     <>
-      <Modal isOpen onClose={onClose} title="Agregar Nuevo Circuito" size="lg">
+      <Modal isOpen onClose={onClose} title={isEditMode ? 'Editar Circuito' : 'Agregar Nuevo Circuito'} size="lg">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input label="Denominacion *" value={denomination} onChange={(e) => setDenomination(e.target.value)} />
@@ -233,7 +244,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
           <div className="flex gap-2 justify-end">
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
             <Button onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? 'Creando...' : 'Crear Circuito'}
+              {isSubmitting ? (isEditMode ? 'Guardando...' : 'Creando...') : (isEditMode ? 'Guardar cambios' : 'Crear Circuito')}
             </Button>
           </div>
         </div>
@@ -253,7 +264,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated }: Circuit
             <div className="flex gap-2 justify-end">
               <Button variant="secondary" onClick={handleForceCancel}>Cancelar</Button>
               <Button onClick={handleForceConfirm} disabled={isSubmitting}>
-                {isSubmitting ? 'Creando...' : 'Continuar'}
+                {isSubmitting ? 'Guardando...' : 'Continuar'}
               </Button>
             </div>
           </div>

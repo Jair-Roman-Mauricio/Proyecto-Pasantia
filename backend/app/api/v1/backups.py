@@ -28,6 +28,7 @@ from app.models.notification import Notification
 from app.models.request import Request
 from app.models.audit_log import AuditLog
 from app.models.backup import Backup
+from app.models.permission import Permission
 from app.schemas.backup import BackupCreate, BackupResponse
 from app.services.audit_service import AuditService
 from app.services.energy_calculator import EnergyCalculator
@@ -103,6 +104,9 @@ def create_backup(
     admin: User = Depends(require_admin),
 ):
     backup_data = {
+        # Usuarios y permisos primero: otras tablas tienen FK hacia users
+        "users": [_serialize_model(u) for u in db.query(User).all()],
+        "permissions": [_serialize_model(p) for p in db.query(Permission).all()],
         "stations": [_serialize_model(s) for s in db.query(Station).all()],
         "bars": [_serialize_model(b) for b in db.query(Bar).all()],
         "circuits": [_serialize_model(c) for c in db.query(Circuit).all()],
@@ -287,7 +291,11 @@ def download_pgdump(_: User = Depends(require_admin)):
 
     pgdump = _find_pgdump()
     result = subprocess.run(
-        [pgdump, "-h", host, "-p", port, "-U", user, "-d", dbname, "--no-owner", "--no-acl"],
+        # -n public: restringe el dump al schema public (tablas de la aplicación).
+        # Excluye los schemas internos de Supabase (auth.*, storage.*, realtime.*),
+        # lo que hace el archivo directamente importable en un proyecto Supabase nuevo.
+        [pgdump, "-h", host, "-p", port, "-U", user, "-d", dbname,
+         "-n", "public", "--no-owner", "--no-acl"],
         capture_output=True,
         env=env,
     )
@@ -327,7 +335,11 @@ def create_pgdump_backup(
 
     pgdump = _find_pgdump()
     result = subprocess.run(
-        [pgdump, "-h", host, "-p", port, "-U", user, "-d", dbname, "--no-owner", "--no-acl"],
+        # -n public: restringe el dump al schema public (tablas de la aplicación).
+        # Excluye los schemas internos de Supabase (auth.*, storage.*, realtime.*),
+        # lo que hace el archivo directamente importable en un proyecto Supabase nuevo.
+        [pgdump, "-h", host, "-p", port, "-U", user, "-d", dbname,
+         "-n", "public", "--no-owner", "--no-acl"],
         capture_output=True,
         env=env,
     )
@@ -348,7 +360,7 @@ def create_pgdump_backup(
     backup = Backup(
         created_by=admin.id,
         file_name=file_name,
-        description="pg_dump completo",
+        description="pg_dump schema public (tablas de aplicación)",
         backup_data={"type": "pgdump", "file_path": file_path},
         includes_audit=True,
         size_bytes=size_bytes,
@@ -375,6 +387,124 @@ def create_pgdump_backup(
         includes_audit=backup.includes_audit,
         size_bytes=backup.size_bytes,
         created_at=backup.created_at,
+    )
+
+
+def _backup_to_sql(data: dict) -> str:
+    """
+    Convierte el diccionario de backup JSON a sentencias SQL INSERT.
+
+    Genera un script SQL compatible con Supabase/PostgreSQL que puede pegarse
+    directamente en el SQL Editor de Supabase para restaurar los datos.
+    Cada INSERT usa ON CONFLICT (id) DO NOTHING para evitar errores si el
+    registro ya existe. Las secuencias se actualizan al final de cada tabla.
+
+    Args:
+        data (dict): Diccionario de backup con claves por tabla
+                     (stations, bars, circuits, etc.).
+
+    Returns:
+        str: Script SQL completo listo para ejecutar.
+    """
+    lines = [
+        "-- SQL generado automaticamente por el sistema de backups",
+        "-- Importar en Supabase SQL Editor para restaurar los datos",
+        "-- Las tablas deben existir previamente (se crean al iniciar la app)",
+        "",
+        "SET search_path TO public;",
+        "",
+    ]
+
+    # Orden respeta dependencias de clave foranea: padres antes que hijos
+    # users y permissions primero porque otras tablas (observations, requests, etc.) referencian users
+    table_order = [
+        "users",
+        "permissions",
+        "stations",
+        "bars",
+        "circuits",
+        "sub_circuits",
+        "observations",
+        "notifications",
+        "requests",
+    ]
+    if "audit_logs" in data:
+        table_order.append("audit_logs")
+
+    def escape_val(v) -> str:
+        """Escapa un valor Python para uso seguro dentro de una sentencia SQL."""
+        if v is None:
+            return "NULL"
+        if isinstance(v, bool):
+            return "TRUE" if v else "FALSE"
+        if isinstance(v, (int, float)):
+            return str(v)
+        # Cadenas de texto: escapar comillas simples duplicándolas
+        return "'" + str(v).replace("'", "''") + "'"
+
+    for table_name in table_order:
+        rows = data.get(table_name, [])
+        lines.append(f"-- {table_name} ({len(rows)} registros)")
+
+        if not rows:
+            lines.append("")
+            continue
+
+        cols = list(rows[0].keys())
+        cols_str = ", ".join(cols)
+
+        for row in rows:
+            vals = ", ".join(escape_val(row[c]) for c in cols)
+            lines.append(
+                f"INSERT INTO {table_name} ({cols_str}) VALUES ({vals})"
+                f" ON CONFLICT (id) DO NOTHING;"
+            )
+
+        # Actualizar la secuencia del autoincrement para evitar colisiones futuras.
+        # users y permissions usan UUID como PK, no tienen secuencia serial.
+        if table_name not in ("users", "permissions"):
+            lines.append(
+                f"SELECT setval(pg_get_serial_sequence('{table_name}', 'id'),"
+                f" COALESCE((SELECT MAX(id) FROM {table_name}), 1));"
+            )
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+@router.get(
+    "/{backup_id}/download/sql",
+    summary="Descargar backup como SQL",
+    description="Convierte el backup JSON a sentencias SQL INSERT compatibles con Supabase. Solo admin. No disponible para backups pg_dump.",
+    responses={
+        401: {"description": "No autenticado"},
+        403: {"description": "Se requiere rol admin"},
+        400: {"description": "Este backup es un pg_dump, no tiene formato JSON"},
+        404: {"description": "Backup no encontrado"},
+    },
+)
+def download_backup_sql(
+    backup_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    backup = db.query(Backup).filter(Backup.id == backup_id).first()
+    if not backup:
+        raise HTTPException(status_code=404, detail="Backup no encontrado")
+
+    if isinstance(backup.backup_data, dict) and backup.backup_data.get("type") == "pgdump":
+        raise HTTPException(
+            status_code=400,
+            detail="Este backup es un pg_dump. Use el botón Descargar para obtener el archivo SQL.",
+        )
+
+    sql_content = _backup_to_sql(backup.backup_data)
+    sql_filename = backup.file_name.replace(".json", ".sql")
+
+    return StreamingResponse(
+        io.BytesIO(sql_content.encode("utf-8")),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{sql_filename}"'},
     )
 
 

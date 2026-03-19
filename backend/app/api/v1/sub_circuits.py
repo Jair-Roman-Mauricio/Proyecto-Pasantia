@@ -96,6 +96,65 @@ def create_sub_circuit(
     return sub
 
 
+@router.put(
+    "/{sub_circuit_id}",
+    response_model=SubCircuitResponse,
+    summary="Actualizar datos técnicos de un sub-circuito",
+    description="Modifica los campos técnicos del sub-circuito (nombre, descripción, ITM, MM2, PI, FD). Si se actualiza `pi_kw` o `fd` sin proporcionar `md_kw`, éste se recalcula automáticamente como `pi_kw × fd`. Recalcula la energía de la estación. Solo admin.",
+    response_description="Datos del sub-circuito actualizado",
+    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Sub-circuito no encontrado"}},
+)
+def update_sub_circuit(
+    sub_circuit_id: int,
+    data: SubCircuitUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    sub = db.query(SubCircuit).filter(SubCircuit.id == sub_circuit_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Sub-circuito no encontrado")
+
+    if data.name is not None:
+        sub.name = data.name
+    if data.description is not None:
+        sub.description = data.description
+    if data.itm is not None:
+        sub.itm = data.itm
+    if data.mm2 is not None:
+        sub.mm2 = data.mm2
+    if data.pi_kw is not None:
+        sub.pi_kw = data.pi_kw
+    if data.fd is not None:
+        sub.fd = data.fd
+
+    # Recalcular md_kw: si se provee explícitamente se usa ese valor;
+    # si no pero cambió pi_kw o fd, se recalcula automáticamente
+    if data.md_kw is not None:
+        sub.md_kw = data.md_kw
+    elif data.pi_kw is not None or data.fd is not None:
+        sub.md_kw = sub.pi_kw * sub.fd
+
+    safe_commit(db)
+    db.refresh(sub)
+
+    circuit = db.query(Circuit).filter(Circuit.id == sub.circuit_id).first()
+    if circuit:
+        bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
+        if bar:
+            EnergyCalculator(db).recalculate_station(bar.station_id)
+
+    audit = AuditService(db)
+    audit.log(
+        user=admin,
+        action="UPDATE_SUB_CIRCUIT",
+        entity_type="sub_circuit",
+        entity_id=sub.id,
+        details={"name": sub.name, "pi_kw": str(sub.pi_kw), "fd": str(sub.fd), "md_kw": str(sub.md_kw)},
+    )
+
+    return sub
+
+
 @router.delete(
     "/{sub_circuit_id}",
     summary="Eliminar un sub-circuito",

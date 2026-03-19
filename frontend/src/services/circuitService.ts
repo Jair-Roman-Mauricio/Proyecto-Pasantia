@@ -109,6 +109,18 @@ export const circuitService = {
   },
 
   /**
+   * Actualiza los datos técnicos de un subcircuito existente (edición parcial).
+   *
+   * @param id   - Identificador numérico del subcircuito a modificar.
+   * @param data - Campos del subcircuito que se desean actualizar.
+   * @returns Una promesa que resuelve con el objeto `SubCircuit` actualizado.
+   */
+  async updateSubCircuit(id: number, data: Partial<SubCircuit>): Promise<SubCircuit> {
+    const { data: res } = await api.put<SubCircuit>(`/sub-circuits/${id}`, data);
+    return res;
+  },
+
+  /**
    * Elimina un subcircuito del sistema de forma permanente.
    *
    * @param id - Identificador numérico del subcircuito a eliminar.

@@ -67,20 +67,24 @@ class EnergyCalculator:
 
         # Recuperar todas las barras asociadas a la estación
         bars = self.db.query(Bar).filter(Bar.station_id == station_id).all()
-        bar_ids = [b.id for b in bars]
+
+        # Factor de reducción aplicado a barras de emergencia y continuidad:
+        # su contribución a la demanda total de la estación es el 75 % de su MD acumulada.
+        # La barra normal contribuye con el 100 % de su MD.
+        REDUCED_DEMAND_FACTOR = Decimal("0.75")
 
         total_md = Decimal("0")
-        if bar_ids:
-            # Consultar circuitos activos u operativos de todas las barras
+        for bar in bars:
+            # Circuitos activos de esta barra específica
             circuits = (
                 self.db.query(Circuit)
-                .filter(Circuit.bar_id.in_(bar_ids))
+                .filter(Circuit.bar_id == bar.id)
                 .filter(Circuit.status != "inactive")
                 .all()
             )
-            total_md = sum((c.md_kw for c in circuits), Decimal("0"))
+            bar_md = sum((c.md_kw for c in circuits), Decimal("0"))
 
-            # Sumar también la demanda máxima de los sub-circuitos operativos
+            # Sumar la MD de los sub-circuitos operativos de estos circuitos
             circuit_ids = [c.id for c in circuits]
             if circuit_ids:
                 sub_circuits = (
@@ -89,7 +93,13 @@ class EnergyCalculator:
                     .filter(SubCircuit.status == "operative_normal")
                     .all()
                 )
-                total_md += sum((s.md_kw for s in sub_circuits), Decimal("0"))
+                bar_md += sum((s.md_kw for s in sub_circuits), Decimal("0"))
+
+            # Las barras de emergencia y continuidad aportan solo el 75 % de su MD
+            if bar.bar_type in ("emergency", "continuity"):
+                bar_md *= REDUCED_DEMAND_FACTOR
+
+            total_md += bar_md
 
         # Actualizar los campos de demanda y potencia disponible en la estación
         station.max_demand_kw = total_md
@@ -216,6 +226,11 @@ class EnergyCalculator:
             )
             total_pi += sum((s.pi_kw for s in sub_circuits), Decimal("0"))
             total_md += sum((s.md_kw for s in sub_circuits), Decimal("0"))
+
+        # Las barras de emergencia y continuidad aplican un factor de 0.75 sobre la MD total.
+        # La potencia instalada (PI) no se reduce: refleja lo físicamente instalado.
+        if bar.bar_type in ("emergency", "continuity"):
+            total_md *= Decimal("0.75")
 
         return {
             "total_installed_power_kw": float(total_pi),

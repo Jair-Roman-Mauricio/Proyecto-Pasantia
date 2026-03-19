@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -38,10 +39,17 @@ def get_bars_by_station(
     db: Session = Depends(get_db),
     _: User = Depends(check_permission("view_stations")),
 ):
+    # Orden presentacional: normal → emergency → continuity
+    bar_type_order = case(
+        (Bar.bar_type == "normal", 1),
+        (Bar.bar_type == "emergency", 2),
+        (Bar.bar_type == "continuity", 3),
+        else_=4,
+    )
     bars = (
         db.query(Bar)
         .filter(Bar.station_id == station_id)
-        .order_by(Bar.bar_type)
+        .order_by(bar_type_order)
         .all()
     )
     return bars

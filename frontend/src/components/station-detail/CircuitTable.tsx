@@ -4,12 +4,13 @@
  * Los circuitos UPS muestran un modal de selección de barra destino antes de navegar.
  */
 import { useState } from 'react';
-import { Trash2, Eye } from 'lucide-react';
+import { Trash2, Eye, Pencil } from 'lucide-react';
 import type { Circuit, Bar } from '../../types';
 import Table from '../ui/Table';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import DeleteCircuitModal from './DeleteCircuitModal';
+import CircuitForm from './CircuitForm';
 
 /** Props de la tabla de circuitos */
 interface CircuitTableProps {
@@ -35,6 +36,8 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, onView, o
   const [circuitToDelete, setCircuitToDelete] = useState<Circuit | null>(null);
   // Almacena el circuito UPS sobre el que se está eligiendo la barra de destino
   const [upsCircuit, setUpsCircuit] = useState<Circuit | null>(null);
+  // Circuito seleccionado para editar; al asignarlo abre CircuitForm en modo edición
+  const [editingCircuit, setEditingCircuit] = useState<Circuit | null>(null);
 
   /** Busca el nombre legible de una barra por su ID; retorna cadena vacía si no se encuentra */
   const getBarName = (barId: number | null) => {
@@ -91,9 +94,15 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, onView, o
           key: 'actions',
           header: 'Acciones',
           render: (c: Circuit) => (
-            <Button variant="danger" size="sm" onClick={() => setCircuitToDelete(c)}>
-              <Trash2 size={14} />
-            </Button>
+            <div className="flex gap-1">
+              {/* Botón editar: abre CircuitForm pre-llenado con los datos del circuito */}
+              <Button variant="ghost" size="sm" onClick={() => setEditingCircuit(c)} title="Editar circuito">
+                <Pencil size={14} />
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => setCircuitToDelete(c)} title="Eliminar circuito">
+                <Trash2 size={14} />
+              </Button>
+            </div>
           ),
         }]
       : [{
@@ -126,6 +135,16 @@ export default function CircuitTable({ circuits, isEditMode, onDelete, onView, o
         onCancel={() => setCircuitToDelete(null)}
         onConfirm={() => { setCircuitToDelete(null); onDelete(); }}
       />
+      {/* Modal de edición: se abre al hacer clic en el botón lápiz de una fila en modo edición */}
+      {editingCircuit && (
+        <CircuitForm
+          barId={editingCircuit.bar_id}
+          bars={bars}
+          editingCircuit={editingCircuit}
+          onClose={() => setEditingCircuit(null)}
+          onCreated={() => { setEditingCircuit(null); onDelete(); }}
+        />
+      )}
       {upsCircuit && (
         <Modal isOpen onClose={() => setUpsCircuit(null)} title="Circuito UPS - Elegir conexion" size="sm">
           <div className="space-y-3">
