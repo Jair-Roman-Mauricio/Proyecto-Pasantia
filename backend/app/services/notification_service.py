@@ -1,233 +1,109 @@
-"""
-Módulo de generación automática de notificaciones del sistema.
-
-Contiene la lógica para detectar circuitos y sub-circuitos en estado de
-reserva cuyo plazo ha vencido sin que se haya registrado contacto con el
-cliente, y para generar las notificaciones correspondientes en la base
-de datos. Este módulo es invocado periódicamente por un job programado.
-"""
-
 from datetime import date
-
-from sqlalchemy.orm import Session, joinedload
-
-from app.models.circuit import Circuit
-from app.models.sub_circuit import SubCircuit
-from app.models.notification import Notification
+from app.subest_client import get_subest_client
 
 
-def _has_active_notification(db: Session, circuit_id: int, today: date) -> bool:
-    """
-    Verifica si ya existe una notificación activa de tipo 'reserve_no_contact'
-    para el circuito indicado.
-
-    Evita duplicar notificaciones cuando el job se ejecuta varias veces en
-    el mismo día o cuando la reserva sigue vencida en ejecuciones posteriores.
-    Una notificación se considera activa si no ha sido descartada
-    (``is_dismissed = False``) y su extensión, si existe, aún no ha vencido.
-
-    Args:
-        db (Session): Sesión activa de SQLAlchemy.
-        circuit_id (int): Identificador del circuito a verificar.
-        today (date): Fecha actual utilizada para comparar ``extended_until``.
-
-    Returns:
-        bool: ``True`` si ya existe al menos una notificación activa para
-            el circuito; ``False`` en caso contrario.
-    """
-    return (
-        db.query(Notification)
-        .filter(
-            Notification.circuit_id == circuit_id,
-            Notification.type == "reserve_no_contact",
-            Notification.is_dismissed == False,
-        )
-        .filter(
-            (Notification.extended_until == None)
-            | (Notification.extended_until > today)
-        )
-        .first()
-        is not None
-    )
-
-
-def _make_message(name: str, expires_at: date, today: date) -> str:
-    """
-    Construye el texto de la notificación según si la reserva vence hoy o ya venció.
-
-    Args:
-        name (str): Nombre o denominación del circuito o sub-circuito.
-        expires_at (date): Fecha en la que vence o venció la reserva.
-        today (date): Fecha actual para calcular los días de atraso.
-
-    Returns:
-        str: Mensaje descriptivo listo para almacenar en el modelo
-            ``Notification``. Indica si la reserva vence hoy o cuántos
-            días lleva vencida, e invita al operador a extender o eliminar
-            la reserva.
-    """
-    # Calcular cuántos días han pasado desde el vencimiento (negativo si es hoy)
-    days_overdue = (today - expires_at).days
+def _make_message(name: str, expires_at, today: date) -> str:
+    days_overdue = (today - expires_at).days if hasattr(expires_at, 'days') else 0
+    if isinstance(expires_at, str):
+        from datetime import datetime
+        expires_at = datetime.strptime(expires_at, "%Y-%m-%d").date()
+        days_overdue = (today - expires_at).days
     if days_overdue <= 0:
-        # La reserva vence exactamente hoy
-        return (
-            f"La reserva del circuito {name} vence hoy ({expires_at}). "
-            f"Puede extender el plazo o eliminar la reserva."
-        )
-    # La reserva ya venció hace uno o más días
-    return (
-        f"La reserva del circuito {name} venció hace {days_overdue} día(s) (fecha límite: {expires_at}). "
-        f"Puede extender el plazo o eliminar la reserva."
-    )
+        return f"La reserva del circuito {name} vence hoy ({expires_at}). Puede extender el plazo o eliminar la reserva."
+    return f"La reserva del circuito {name} venció hace {days_overdue} día(s) (fecha límite: {expires_at}). Puede extender el plazo o eliminar la reserva."
 
 
-def check_expiring_reserves(db: Session) -> None:
-    """
-    Detecta reservas vencidas y genera notificaciones automáticas del sistema.
+def _parse_date(val) -> date | None:
+    if val is None:
+        return None
+    if isinstance(val, date):
+        return val
+    try:
+        from datetime import datetime
+        return datetime.strptime(str(val)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
 
-    Ejecuta tres casos de detección de forma secuencial:
 
-    **Caso 1 — Circuitos con reserva vencida:**
-        Consulta circuitos en estado ``reserve_r`` o ``reserve_equipped_re``
-        cuya fecha ``reserve_expires_at`` sea menor o igual a hoy. Por cada
-        uno crea una notificación de tipo ``reserve_no_contact`` si no existe
-        ya una notificación activa.
+def _has_active_notification(client, circuit_id: int, today: date) -> bool:
+    result = client.table("notifications").select("id,extended_until").eq("circuit_id", circuit_id).eq("type", "reserve_no_contact").eq("is_dismissed", False).execute()
+    for n in result.data:
+        ext = _parse_date(n.get("extended_until"))
+        if ext is None or ext > today:
+            return True
+    return False
 
-    **Caso 2 — Sub-circuitos con reserva vencida:**
-        Igual que el caso 1 pero sobre la tabla ``sub_circuits``. La
-        notificación queda asociada al circuito padre del sub-circuito.
 
-    **Caso 3 — Extensiones que vencen hoy:**
-        Busca notificaciones de tipo ``reserve_no_contact`` cuya
-        ``extended_until`` sea exactamente hoy. Descarta la notificación
-        vigente y crea una nueva para alertar que la extensión también
-        ha vencido.
-
-    Al finalizar, persiste todos los cambios en la base de datos. Si ocurre
-    una excepción durante el commit, realiza un rollback para mantener la
-    consistencia de los datos.
-
-    Args:
-        db (Session): Sesión activa de SQLAlchemy. No se cierra ni se
-            gestiona su ciclo de vida dentro de esta función.
-
-    Returns:
-        None
-    """
+def check_expiring_reserves() -> None:
+    client = get_subest_client()
     today = date.today()
+    today_str = today.isoformat()
 
-    # ── Caso 1: Circuitos con reserve_expires_at <= hoy ──────────────────────
-    circuits = (
-        db.query(Circuit)
-        .options(joinedload(Circuit.bar))
-        .filter(
-            Circuit.status.in_(["reserve_r", "reserve_equipped_re"]),
-            Circuit.reserve_expires_at.isnot(None),
-            Circuit.reserve_expires_at <= today,
-        )
-        .all()
-    )
+    # Case 1: circuits with expired reserve
+    circuits = client.table("circuits").select("id,name,denomination,bar_id,reserve_expires_at").in_("status", ["reserve_r", "reserve_equipped_re"]).not_.is_("reserve_expires_at", "null").lte("reserve_expires_at", today_str).execute().data
 
     for circuit in circuits:
         try:
-            # Omitir si ya existe una notificación activa para este circuito
-            if _has_active_notification(db, circuit.id, today):
+            if _has_active_notification(client, circuit["id"], today):
                 continue
-            name = circuit.name or circuit.denomination
-            bar = circuit.bar
-            station_id = bar.station_id if bar else None
-            db.add(
-                Notification(
-                    circuit_id=circuit.id,
-                    station_id=station_id,
-                    type="reserve_no_contact",
-                    message=_make_message(name, circuit.reserve_expires_at, today),
-                )
-            )
+            name = circuit.get("name") or circuit.get("denomination") or str(circuit["id"])
+            bar_result = client.table("bars").select("station_id").eq("id", circuit["bar_id"]).execute()
+            station_id = bar_result.data[0]["station_id"] if bar_result.data else None
+            expires_at = _parse_date(circuit["reserve_expires_at"])
+            client.table("notifications").insert({
+                "circuit_id": circuit["id"],
+                "station_id": station_id,
+                "type": "reserve_no_contact",
+                "message": _make_message(name, expires_at, today),
+            }).execute()
         except Exception:
-            # Continuar con el siguiente circuito ante cualquier error puntual
             continue
 
-    # ── Caso 2: Sub-circuitos con reserve_expires_at <= hoy ──────────────────
-    sub_circuits = (
-        db.query(SubCircuit)
-        .options(joinedload(SubCircuit.circuit).joinedload(Circuit.bar))
-        .filter(
-            SubCircuit.status.in_(["reserve_r", "reserve_equipped_re"]),
-            SubCircuit.reserve_expires_at.isnot(None),
-            SubCircuit.reserve_expires_at <= today,
-        )
-        .all()
-    )
+    # Case 2: sub_circuits with expired reserve
+    subs = client.table("sub_circuits").select("id,name,circuit_id,reserve_expires_at").in_("status", ["reserve_r", "reserve_equipped_re"]).not_.is_("reserve_expires_at", "null").lte("reserve_expires_at", today_str).execute().data
 
-    for sub in sub_circuits:
+    for sub in subs:
         try:
-            # Omitir si ya existe una notificación activa para el circuito padre
-            if _has_active_notification(db, sub.circuit_id, today):
+            if _has_active_notification(client, sub["circuit_id"], today):
                 continue
-            name = sub.name
-            circuit = sub.circuit
-            bar = circuit.bar if circuit else None
-            station_id = bar.station_id if bar else None
-            db.add(
-                Notification(
-                    circuit_id=sub.circuit_id,
-                    station_id=station_id,
-                    type="reserve_no_contact",
-                    message=_make_message(f"sub-circuito {name}", sub.reserve_expires_at, today),
-                )
-            )
+            circuit_result = client.table("circuits").select("bar_id").eq("id", sub["circuit_id"]).execute()
+            station_id = None
+            if circuit_result.data:
+                bar_result = client.table("bars").select("station_id").eq("id", circuit_result.data[0]["bar_id"]).execute()
+                if bar_result.data:
+                    station_id = bar_result.data[0]["station_id"]
+            expires_at = _parse_date(sub["reserve_expires_at"])
+            client.table("notifications").insert({
+                "circuit_id": sub["circuit_id"],
+                "station_id": station_id,
+                "type": "reserve_no_contact",
+                "message": _make_message(f"sub-circuito {sub['name']}", expires_at, today),
+            }).execute()
         except Exception:
-            # Continuar con el siguiente sub-circuito ante cualquier error puntual
             continue
 
-    # ── Caso 3: Notificaciones con extended_until == hoy → crear nueva ────────
-    expiring_extended = (
-        db.query(Notification)
-        .filter(
-            Notification.type == "reserve_no_contact",
-            Notification.extended_until == today,
-            Notification.is_dismissed == False,
-        )
-        .all()
-    )
+    # Case 3: extended notifications expiring today
+    expiring = client.table("notifications").select("id,circuit_id").eq("type", "reserve_no_contact").eq("extended_until", today_str).eq("is_dismissed", False).execute().data
 
-    for notif in expiring_extended:
+    for notif in expiring:
         try:
-            # Ignorar notificaciones huérfanas sin circuito asociado
-            if not notif.circuit_id:
+            if not notif.get("circuit_id"):
                 continue
-            circuit = (
-                db.query(Circuit)
-                .options(joinedload(Circuit.bar))
-                .filter(Circuit.id == notif.circuit_id)
-                .first()
-            )
-            if circuit and circuit.status in ("reserve_r", "reserve_equipped_re"):
-                # Descartar la notificación extendida que acaba de vencer
-                notif.is_dismissed = True
-                name = circuit.name or circuit.denomination
-                bar = circuit.bar
-                station_id = bar.station_id if bar else None
-                # Crear una nueva notificación indicando que la extensión también venció
-                db.add(
-                    Notification(
-                        circuit_id=circuit.id,
-                        station_id=station_id,
-                        type="reserve_no_contact",
-                        message=(
-                            f"La extensión de reserva del circuito {name} venció hoy ({today}). "
-                            f"Puede extender nuevamente o eliminar la reserva."
-                        ),
-                    )
-                )
+            circuit_result = client.table("circuits").select("id,name,denomination,bar_id,status").eq("id", notif["circuit_id"]).execute()
+            if not circuit_result.data:
+                continue
+            circuit = circuit_result.data[0]
+            if circuit["status"] not in ("reserve_r", "reserve_equipped_re"):
+                continue
+            client.table("notifications").update({"is_dismissed": True}).eq("id", notif["id"]).execute()
+            bar_result = client.table("bars").select("station_id").eq("id", circuit["bar_id"]).execute()
+            station_id = bar_result.data[0]["station_id"] if bar_result.data else None
+            name = circuit.get("name") or circuit.get("denomination") or str(circuit["id"])
+            client.table("notifications").insert({
+                "circuit_id": circuit["id"],
+                "station_id": station_id,
+                "type": "reserve_no_contact",
+                "message": f"La extensión de reserva del circuito {name} venció hoy ({today}). Puede extender nuevamente o eliminar la reserva.",
+            }).execute()
         except Exception:
-            # Continuar con la siguiente notificación ante cualquier error puntual
             continue
-
-    try:
-        # Persistir todas las nuevas notificaciones generadas en esta ejecución
-        db.commit()
-    except Exception:
-        # Revertir la transacción completa si el commit falla
-        db.rollback()

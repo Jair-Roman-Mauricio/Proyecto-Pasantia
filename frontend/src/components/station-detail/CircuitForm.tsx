@@ -177,7 +177,7 @@ export default function CircuitForm({ barId, bars, onClose, onCreated, editingCi
             <div>
               <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Estado</label>
               {/* Al cambiar el estado se limpia la fecha de reserva previa para evitar inconsistencias */}
-              <select value={status} onChange={(e) => { setStatus(e.target.value); setReserveExpiresAt(''); }} className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]">
+              <select value={status} onChange={(e) => { setStatus(e.target.value as "inactive" | "operative_normal" | "reserve_r" | "reserve_equipped_re"); setReserveExpiresAt(''); }} className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]">
                 <option value="operative_normal">Operativo Normal</option>
                 <option value="reserve_r">Reserva (R)</option>
                 <option value="reserve_equipped_re">Reserva Equipada (R/E)</option>

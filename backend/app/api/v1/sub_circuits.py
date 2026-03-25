@@ -2,243 +2,145 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.dependencies import get_current_user, require_admin, check_permission
-from app.models.user import User
-from app.models.circuit import Circuit
-from app.models.sub_circuit import SubCircuit
-from app.models.bar import Bar
+from app.dependencies import require_admin, check_permission
+from app.subest_client import get_subest_client
 from app.schemas.sub_circuit import SubCircuitCreate, SubCircuitUpdate, SubCircuitResponse, SubCircuitStatusUpdate
 from app.services.energy_calculator import EnergyCalculator
 from app.services.audit_service import AuditService
-from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/sub-circuits", tags=["Sub-Circuits"])
 
 
-@router.get(
-    "/circuit/{circuit_id}",
-    response_model=list[SubCircuitResponse],
-    summary="Listar sub-circuitos de un circuito",
-    description="Retorna todos los sub-circuitos (ampliaciones) del circuito indicado. **Requiere permiso:** `view_circuits`",
-    response_description="Lista de sub-circuitos",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_circuits no habilitado"}},
-)
-def get_sub_circuits(
-    circuit_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(check_permission("view_circuits")),
-):
-    return (
-        db.query(SubCircuit)
-        .filter(SubCircuit.circuit_id == circuit_id)
-        .order_by(SubCircuit.id)
-        .all()
-    )
+def _get_station_id(client, circuit_id: int) -> int | None:
+    circuit = client.table("circuits").select("bar_id").eq("id", circuit_id).execute()
+    if not circuit.data:
+        return None
+    bar = client.table("bars").select("station_id").eq("id", circuit.data[0]["bar_id"]).execute()
+    return bar.data[0]["station_id"] if bar.data else None
 
 
-@router.post(
-    "/circuit/{circuit_id}",
-    response_model=SubCircuitResponse,
-    summary="Crear sub-circuito en un circuito",
-    description="Crea un sub-circuito (ampliación) dentro del circuito indicado. Si no se provee `md_kw`, se calcula como `pi_kw × fd`. Recalcula energía de la estación. Solo admin.",
-    response_description="Datos del sub-circuito recién creado",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Circuito no encontrado"}},
-)
-def create_sub_circuit(
-    circuit_id: int,
-    data: SubCircuitCreate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    circuit = db.query(Circuit).filter(Circuit.id == circuit_id).first()
-    if not circuit:
+@router.get("/circuit/{circuit_id}", response_model=list[SubCircuitResponse])
+def get_sub_circuits(circuit_id: int, _=Depends(check_permission("view_circuits"))):
+    client = get_subest_client()
+    result = client.table("sub_circuits").select("*").eq("circuit_id", circuit_id).order("id").execute()
+    return result.data
+
+
+@router.post("/circuit/{circuit_id}", response_model=SubCircuitResponse, status_code=201)
+def create_sub_circuit(circuit_id: int, data: SubCircuitCreate, admin=Depends(require_admin)):
+    client = get_subest_client()
+    circuit_result = client.table("circuits").select("*").eq("id", circuit_id).execute()
+    if not circuit_result.data:
         raise HTTPException(status_code=404, detail="Circuito no encontrado")
 
     md_kw = data.md_kw if data.md_kw is not None else data.pi_kw * data.fd
-
-    sub = SubCircuit(
-        circuit_id=circuit_id,
-        name=data.name,
-        description=data.description,
-        itm=data.itm,
-        mm2=data.mm2,
-        pi_kw=data.pi_kw,
-        fd=data.fd,
-        md_kw=md_kw,
-        status=data.status,
-    )
-
+    payload = {
+        "circuit_id": circuit_id,
+        "name": data.name,
+        "description": data.description,
+        "itm": data.itm,
+        "mm2": data.mm2,
+        "pi_kw": float(data.pi_kw),
+        "fd": float(data.fd),
+        "md_kw": float(md_kw),
+        "status": data.status,
+    }
     if data.status in ("reserve_r", "reserve_equipped_re"):
-        sub.reserve_since = date.today()
-        sub.reserve_expires_at = data.reserve_expires_at
+        payload["reserve_since"] = date.today().isoformat()
+        payload["reserve_expires_at"] = data.reserve_expires_at.isoformat() if data.reserve_expires_at else None
 
-    db.add(sub)
-    safe_commit(db)
-    db.refresh(sub)
+    result = client.table("sub_circuits").insert(payload).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Error al crear sub-circuito")
+    sub = result.data[0]
 
-    # Recalculate station energy (sub-circuits affect totals)
-    bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
-    if bar:
-        EnergyCalculator(db).recalculate_station(bar.station_id)
+    station_id = _get_station_id(client, circuit_id)
+    if station_id:
+        EnergyCalculator().recalculate_station(station_id)
 
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="CREATE_SUB_CIRCUIT",
-        entity_type="sub_circuit",
-        entity_id=sub.id,
-        details={"name": sub.name, "circuit_id": circuit_id},
-    )
-
+    AuditService().log(user=admin, action="CREATE_SUB_CIRCUIT", entity_type="sub_circuit", entity_id=sub["id"],
+                       details={"name": sub["name"], "circuit_id": circuit_id})
     return sub
 
 
-@router.put(
-    "/{sub_circuit_id}",
-    response_model=SubCircuitResponse,
-    summary="Actualizar datos técnicos de un sub-circuito",
-    description="Modifica los campos técnicos del sub-circuito (nombre, descripción, ITM, MM2, PI, FD). Si se actualiza `pi_kw` o `fd` sin proporcionar `md_kw`, éste se recalcula automáticamente como `pi_kw × fd`. Recalcula la energía de la estación. Solo admin.",
-    response_description="Datos del sub-circuito actualizado",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Sub-circuito no encontrado"}},
-)
-def update_sub_circuit(
-    sub_circuit_id: int,
-    data: SubCircuitUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    sub = db.query(SubCircuit).filter(SubCircuit.id == sub_circuit_id).first()
-    if not sub:
+@router.put("/{sub_circuit_id}", response_model=SubCircuitResponse)
+def update_sub_circuit(sub_circuit_id: int, data: SubCircuitUpdate, admin=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("sub_circuits").select("*").eq("id", sub_circuit_id).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Sub-circuito no encontrado")
+    sub = result.data[0]
 
-    if data.name is not None:
-        sub.name = data.name
-    if data.description is not None:
-        sub.description = data.description
-    if data.itm is not None:
-        sub.itm = data.itm
-    if data.mm2 is not None:
-        sub.mm2 = data.mm2
-    if data.pi_kw is not None:
-        sub.pi_kw = data.pi_kw
-    if data.fd is not None:
-        sub.fd = data.fd
+    patch = {}
+    for field in ("name", "description", "itm", "mm2", "pi_kw", "fd", "md_kw"):
+        val = getattr(data, field, None)
+        if val is not None:
+            patch[field] = float(val) if isinstance(val, Decimal) else val
 
-    # Recalcular md_kw: si se provee explícitamente se usa ese valor;
-    # si no pero cambió pi_kw o fd, se recalcula automáticamente
-    if data.md_kw is not None:
-        sub.md_kw = data.md_kw
-    elif data.pi_kw is not None or data.fd is not None:
-        sub.md_kw = sub.pi_kw * sub.fd
+    if "md_kw" not in patch and ("pi_kw" in patch or "fd" in patch):
+        pi = patch.get("pi_kw", sub["pi_kw"])
+        fd = patch.get("fd", sub["fd"])
+        patch["md_kw"] = float(Decimal(str(pi)) * Decimal(str(fd)))
 
-    safe_commit(db)
-    db.refresh(sub)
+    updated = client.table("sub_circuits").update(patch).eq("id", sub_circuit_id).execute()
+    if not updated.data:
+        raise HTTPException(status_code=500, detail="Error al actualizar sub-circuito")
 
-    circuit = db.query(Circuit).filter(Circuit.id == sub.circuit_id).first()
-    if circuit:
-        bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
-        if bar:
-            EnergyCalculator(db).recalculate_station(bar.station_id)
+    station_id = _get_station_id(client, sub["circuit_id"])
+    if station_id:
+        EnergyCalculator().recalculate_station(station_id)
 
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="UPDATE_SUB_CIRCUIT",
-        entity_type="sub_circuit",
-        entity_id=sub.id,
-        details={"name": sub.name, "pi_kw": str(sub.pi_kw), "fd": str(sub.fd), "md_kw": str(sub.md_kw)},
-    )
-
-    return sub
+    AuditService().log(user=admin, action="UPDATE_SUB_CIRCUIT", entity_type="sub_circuit", entity_id=sub_circuit_id,
+                       details={"name": updated.data[0]["name"]})
+    return updated.data[0]
 
 
-@router.delete(
-    "/{sub_circuit_id}",
-    summary="Eliminar un sub-circuito",
-    description="Elimina permanentemente el sub-circuito. Recalcula energía de la estación. ⚠ Irreversible. Solo admin.",
-    response_description="Mensaje de confirmación",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Sub-circuito no encontrado"}},
-)
-def delete_sub_circuit(
-    sub_circuit_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    sub = db.query(SubCircuit).filter(SubCircuit.id == sub_circuit_id).first()
-    if not sub:
+@router.put("/{sub_circuit_id}/status", response_model=SubCircuitResponse)
+def update_sub_circuit_status(sub_circuit_id: int, data: SubCircuitStatusUpdate, admin=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("sub_circuits").select("*").eq("id", sub_circuit_id).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Sub-circuito no encontrado")
+    sub = result.data[0]
+    old_status = sub["status"]
 
-    info = {"name": sub.name, "circuit_id": sub.circuit_id}
-    circuit_id = sub.circuit_id
-    db.delete(sub)
-    safe_commit(db)
-
-    # Recalculate station energy (sub-circuits affect totals)
-    circuit = db.query(Circuit).filter(Circuit.id == circuit_id).first()
-    if circuit:
-        bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
-        if bar:
-            EnergyCalculator(db).recalculate_station(bar.station_id)
-
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="DELETE_SUB_CIRCUIT",
-        entity_type="sub_circuit",
-        entity_id=sub_circuit_id,
-        details=info,
-    )
-
-    return {"message": "Sub-circuito eliminado exitosamente"}
-
-
-@router.put(
-    "/{sub_circuit_id}/status",
-    response_model=SubCircuitResponse,
-    summary="Cambiar estado de un sub-circuito",
-    description="Cambia el estado del sub-circuito: `operative_normal`, `reserve_r`, `reserve_equipped_re`. Al pasar a reserva se registran fechas de inicio/expiración. Solo admin.",
-    response_description="Datos del sub-circuito con estado actualizado",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Sub-circuito no encontrado"}},
-)
-def update_sub_circuit_status(
-    sub_circuit_id: int,
-    data: SubCircuitStatusUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    sub = db.query(SubCircuit).filter(SubCircuit.id == sub_circuit_id).first()
-    if not sub:
-        raise HTTPException(status_code=404, detail="Sub-circuito no encontrado")
-
-    old_status = sub.status
-    sub.status = data.status
-
+    patch = {"status": data.status}
     if data.status in ("reserve_r", "reserve_equipped_re") and old_status == "operative_normal":
-        sub.reserve_since = date.today()
-        sub.reserve_expires_at = data.reserve_expires_at
+        patch["reserve_since"] = date.today().isoformat()
+        patch["reserve_expires_at"] = data.reserve_expires_at.isoformat() if data.reserve_expires_at else None
     elif data.status == "operative_normal":
-        sub.reserve_since = None
-        sub.reserve_expires_at = None
+        patch["reserve_since"] = None
+        patch["reserve_expires_at"] = None
 
-    safe_commit(db)
-    db.refresh(sub)
+    updated = client.table("sub_circuits").update(patch).eq("id", sub_circuit_id).execute()
+    if not updated.data:
+        raise HTTPException(status_code=500, detail="Error al cambiar estado")
 
-    circuit = db.query(Circuit).filter(Circuit.id == sub.circuit_id).first()
-    if circuit:
-        bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
-        if bar:
-            EnergyCalculator(db).recalculate_station(bar.station_id)
+    station_id = _get_station_id(client, sub["circuit_id"])
+    if station_id:
+        EnergyCalculator().recalculate_station(station_id)
 
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="CHANGE_SUB_CIRCUIT_STATUS",
-        entity_type="sub_circuit",
-        entity_id=sub.id,
-        details={"old_status": old_status, "new_status": data.status},
-    )
+    AuditService().log(user=admin, action="CHANGE_SUB_CIRCUIT_STATUS", entity_type="sub_circuit", entity_id=sub_circuit_id,
+                       details={"old_status": old_status, "new_status": data.status})
+    return updated.data[0]
 
-    return sub
+
+@router.delete("/{sub_circuit_id}")
+def delete_sub_circuit(sub_circuit_id: int, admin=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("sub_circuits").select("*").eq("id", sub_circuit_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Sub-circuito no encontrado")
+    sub = result.data[0]
+    info = {"name": sub["name"], "circuit_id": sub["circuit_id"]}
+
+    client.table("sub_circuits").delete().eq("id", sub_circuit_id).execute()
+
+    station_id = _get_station_id(client, sub["circuit_id"])
+    if station_id:
+        EnergyCalculator().recalculate_station(station_id)
+
+    AuditService().log(user=admin, action="DELETE_SUB_CIRCUIT", entity_type="sub_circuit", entity_id=sub_circuit_id,
+                       details=info)
+    return {"message": "Sub-circuito eliminado exitosamente"}

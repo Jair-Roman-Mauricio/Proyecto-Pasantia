@@ -1,7 +1,19 @@
 import httpx
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 
 from app.config import settings
+
+
+def verify_password(plain: str, stored: str) -> bool:
+    return plain == stored
+
+
+def create_access_token(data: dict, expires_minutes: int = 60 * 24) -> str:
+    payload = data.copy()
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    payload["iss"] = "linea1metro"
+    return jwt.encode(payload, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
 
 _jwks_cache: dict | None = None
 

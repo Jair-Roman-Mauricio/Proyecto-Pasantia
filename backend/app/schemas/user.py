@@ -39,10 +39,10 @@ class UserUpdate(BaseModel):
     """
 
     full_name: Optional[str] = None
-    # Nuevo estado de la cuenta: 'active', 'inactive' o 'reported'
     status: Optional[str] = None
-    email: Optional[str] = None        # Correo personal de contacto
-    phone: Optional[str] = None        # Teléfono de contacto
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    password: Optional[str] = None
 
 
 class UserResponse(BaseModel):

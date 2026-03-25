@@ -1,12 +1,11 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.config import settings
 from app.api.v1.router import api_router
-from app.database import engine, Base, SessionLocal
-from app.models import *  # noqa: F401 - Import all models for table creation
 
 app = FastAPI(
     title="Línea 1 Metro — API de Gestión Energética",
@@ -67,11 +66,22 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    print(f"[VALIDATION ERROR] {request.method} {request.url}: {exc}")
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, (HTTPException, RequestValidationError)):
+        raise exc
+    import traceback
+    print(f"[ERROR 500] {request.method} {request.url}: {type(exc).__name__}: {exc}")
+    traceback.print_exc()
     return JSONResponse(
         status_code=500,
-        content={"detail": "Error interno del servidor. Intente nuevamente."},
+        content={"detail": f"{type(exc).__name__}: {str(exc)}"},
     )
 
 
@@ -80,19 +90,15 @@ app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 @app.on_event("startup")
 async def on_startup():
-    Base.metadata.create_all(bind=engine)
-    await _seed_initial_data()
+    _seed_initial_data()
 
     from app.services.notification_service import check_expiring_reserves
 
     def run_reserve_check():
-        db = SessionLocal()
         try:
-            check_expiring_reserves(db)
-        except Exception:
-            pass
-        finally:
-            db.close()
+            check_expiring_reserves()
+        except Exception as e:
+            print(f"[RESERVE CHECK] Error: {e}")
 
     run_reserve_check()
 
@@ -101,77 +107,51 @@ async def on_startup():
     scheduler.start()
 
 
-async def _seed_initial_data():
-    import uuid
-    from sqlalchemy.orm import Session
-    from app.database import SessionLocal
-    from app.models.user import User
-    from app.models.station import Station
-    from app.models.bar import Bar
+def _seed_initial_data():
+    from app.subest_client import get_subest_client
     from app.utils.constants import STATIONS, BAR_TYPES
-    from app.utils.supabase_admin import create_supabase_auth_user
 
-    db: Session = SessionLocal()
     try:
-        # Crear las 26 estaciones y sus 3 barras si la tabla está vacía
-        count = db.query(Station).count()
+        client = get_subest_client()
+
+        # Crear las 26 estaciones si la tabla está vacía
+        count_result = client.table("stations").select("id", count="exact").execute()
+        count = count_result.count if hasattr(count_result, 'count') and count_result.count is not None else len(count_result.data)
+
         if count == 0:
-            for station_data in STATIONS:
-                station = Station(
-                    code=station_data["code"],
-                    name=station_data["name"],
-                    order_index=station_data["order_index"],
-                    transformer_capacity_kw=500,
-                    max_demand_kw=0,
-                    available_power_kw=500,
-                    status="green",
-                )
-                db.add(station)
-            db.commit()
-
-            stations = db.query(Station).all()
-            for station in stations:
-                for bar_data in BAR_TYPES:
-                    bar = Bar(
-                        station_id=station.id,
-                        name=bar_data["name"],
-                        bar_type=bar_data["bar_type"],
-                        status="operative",
-                        capacity_kw=200,
-                        capacity_a=300,
-                    )
-                    db.add(bar)
-            db.commit()
-
-        # Crear usuario admin por defecto si no existe ninguno en la BD
-        admin = db.query(User).filter(User.role == "admin").first()
-        if not admin:
-            try:
-                supabase_user = await create_supabase_auth_user(
-                    email="admin@linea1metro.internal",
-                    password="admin123",
-                    username="admin",
-                    role="admin",
-                    full_name="Administrador",
-                )
-                admin = User(
-                    id=uuid.UUID(supabase_user["id"]),
-                    username="admin",
-                    full_name="Administrador del Sistema",
-                    role="admin",
-                    status="active",
-                )
-                db.add(admin)
-                db.commit()
-                print("[SEED] Usuario admin creado correctamente.")
-            except Exception as e:
-                print(f"[SEED] No se pudo crear el admin en Supabase: {e}")
-                print("[SEED] Crea el usuario admin manualmente en Supabase Studio.")
-
-    finally:
-        db.close()
+            for s in STATIONS:
+                result = client.table("stations").insert({
+                    "code": s["code"],
+                    "name": s["name"],
+                    "order_index": s["order_index"],
+                    "transformer_capacity_kw": 500,
+                    "max_demand_kw": 0,
+                    "available_power_kw": 500,
+                    "status": "green",
+                }).execute()
+                if result.data:
+                    station_id = result.data[0]["id"]
+                    for bar_data in BAR_TYPES:
+                        client.table("bars").insert({
+                            "station_id": station_id,
+                            "name": bar_data["name"],
+                            "bar_type": bar_data["bar_type"],
+                            "status": "operative",
+                            "capacity_kw": 200,
+                            "capacity_a": 300,
+                        }).execute()
+            print("[SEED] 26 estaciones y barras creadas en Supabase.")
+        else:
+            print(f"[SEED] Supabase ya tiene {count} estaciones. Skip.")
+    except Exception as e:
+        print(f"[SEED] Error al inicializar datos en Supabase: {e}")
 
 
 @app.get("/")
 def root():
     return {"message": "Linea 1 Metro - Sistema de Gestion Energetica API", "docs": "/docs"}
+
+
+@app.get("/version")
+def version():
+    return {"version": "v2-debug"}

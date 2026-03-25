@@ -1,295 +1,159 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
-from app.database import get_db
 from app.dependencies import get_current_user, require_admin, check_permission
-from app.models.user import User
-from app.models.station import Station
-from app.models.bar import Bar
-from app.models.circuit import Circuit
-from app.models.request import Request
-from app.models.sub_circuit import SubCircuit
+from app.subest_client import get_subest_client
 from app.schemas.request import RequestCreate, RequestReject, RequestResponse
 from app.services.energy_calculator import EnergyCalculator
 from app.services.audit_service import AuditService
-from app.utils.db_helpers import safe_commit
-from sqlalchemy.exc import IntegrityError, OperationalError
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
 
 
-def _enrich_request(req: Request, db: Session) -> RequestResponse:
-    """
-    Enriquece una instancia de Request con datos relacionados (nombre del solicitante,
-    nombre de la estación y nombre del circuito) que no están en el modelo base.
-
-    Retorna un RequestResponse listo para serializar en la respuesta HTTP.
-    """
-    opersac = db.query(User).filter(User.id == req.opersac_user_id).first()
-    station = db.query(Station).filter(Station.id == req.station_id).first()
-    circuit = db.query(Circuit).filter(Circuit.id == req.circuit_id).first() if req.circuit_id else None
-    return RequestResponse(
-        id=req.id,
-        opersac_user_id=req.opersac_user_id,
-        opersac_name=opersac.full_name if opersac else None,
-        station_id=req.station_id,
-        station_name=station.name if station else None,
-        bar_type=req.bar_type,
-        circuit_id=req.circuit_id,
-        circuit_name=circuit.name if circuit else None,
-        local_item=req.local_item,
-        requested_load_kw=req.requested_load_kw,
-        fd=req.fd,
-        sub_circuit_name=req.sub_circuit_name,
-        sub_circuit_description=req.sub_circuit_description,
-        sub_circuit_itm=req.sub_circuit_itm,
-        sub_circuit_mm2=req.sub_circuit_mm2,
-        justification=req.justification,
-        status=req.status,
-        rejection_reason=req.rejection_reason,
-        reviewed_by=req.reviewed_by,
-        reviewed_at=req.reviewed_at,
-        created_at=req.created_at,
-        updated_at=req.updated_at,
-    )
+def _enrich(req: dict, client) -> dict:
+    opersac = client.table("users").select("full_name").eq("id", str(req["opersac_user_id"])).execute()
+    station = client.table("stations").select("name").eq("id", req["station_id"]).execute()
+    circuit = client.table("circuits").select("name").eq("id", req["circuit_id"]).execute() if req.get("circuit_id") else None
+    return {
+        **req,
+        "opersac_name": opersac.data[0]["full_name"] if opersac.data else None,
+        "station_name": station.data[0]["name"] if station.data else None,
+        "circuit_name": circuit.data[0]["name"] if circuit and circuit.data else None,
+    }
 
 
-@router.get(
-    "/circuit-options/{bar_id}",
-    summary="Circuitos disponibles para solicitud",
-    description="Lista los circuitos de la barra indicada para que el operador OPERSAC seleccione a cuál agregar un sub-circuito. **Requiere permiso:** `send_requests`",
-    response_description="Lista simplificada de circuitos (id, denominación, nombre)",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso send_requests no habilitado"}},
-)
-def get_circuit_options_for_request(
-    bar_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(check_permission("send_requests")),
-):
-    circuits = (
-        db.query(Circuit.id, Circuit.denomination, Circuit.name)
-        .filter(Circuit.bar_id == bar_id)
-        .order_by(Circuit.denomination)
-        .all()
-    )
-    return [{"id": c.id, "denomination": c.denomination, "name": c.name} for c in circuits]
+@router.get("/circuit-options/{bar_id}")
+def get_circuit_options_for_request(bar_id: int, _=Depends(check_permission("send_requests"))):
+    client = get_subest_client()
+    result = client.table("circuits").select("id,denomination,name").eq("bar_id", bar_id).order("denomination").execute()
+    return result.data
 
 
-@router.get(
-    "",
-    response_model=list[RequestResponse],
-    summary="Listar todas las solicitudes",
-    description="Retorna todas las solicitudes del sistema ordenadas por fecha de creación (más recientes primero). Solo admin.",
-    response_description="Lista completa de solicitudes con datos del solicitante y estación",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}},
-)
-def get_requests(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    requests = db.query(Request).order_by(Request.created_at.desc()).all()
-    return [_enrich_request(r, db) for r in requests]
+@router.get("", response_model=list[RequestResponse])
+def get_requests(_=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("requests").select("*").order("created_at", desc=True).execute()
+    return [_enrich(r, client) for r in result.data]
 
 
-@router.get(
-    "/my",
-    response_model=list[RequestResponse],
-    summary="Listar mis solicitudes",
-    description="Retorna las solicitudes enviadas por el usuario autenticado, ordenadas por fecha. **Requiere permiso:** `send_requests`",
-    response_description="Lista de solicitudes del usuario actual",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso send_requests no habilitado"}},
-)
-def get_my_requests(
-    db: Session = Depends(get_db),
-    user: User = Depends(check_permission("send_requests")),
-):
-    requests = (
-        db.query(Request)
-        .filter(Request.opersac_user_id == user.id)
-        .order_by(Request.created_at.desc())
-        .all()
-    )
-    return [_enrich_request(r, db) for r in requests]
+@router.get("/my", response_model=list[RequestResponse])
+def get_my_requests(user=Depends(check_permission("send_requests"))):
+    client = get_subest_client()
+    result = client.table("requests").select("*").eq("opersac_user_id", str(user.id)).order("created_at", desc=True).execute()
+    return [_enrich(r, client) for r in result.data]
 
 
-@router.post(
-    "",
-    response_model=RequestResponse,
-    summary="Crear solicitud de ampliación",
-    description="""Crea una nueva solicitud de ampliación de carga. **Requiere permiso:** `send_requests`\n\n**Tipos de solicitud:**\n- Sin `circuit_id`: solicita un **nuevo circuito** en la barra indicada\n- Con `circuit_id`: solicita un **sub-circuito** en un circuito existente\n\nLa solicitud queda en estado `pending` hasta que el admin la apruebe o rechace.""",
-    response_description="Datos de la solicitud creada",
-    responses={400: {"description": "Tipo de barra inválido"}, 401: {"description": "No autenticado"}, 403: {"description": "Permiso send_requests no habilitado"}, 404: {"description": "Estación no encontrada"}},
-)
-def create_request(
-    data: RequestCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(check_permission("send_requests")),
-):
-    station = db.query(Station).filter(Station.id == data.station_id).first()
-    if not station:
+@router.post("", response_model=RequestResponse)
+def create_request(data: RequestCreate, user=Depends(check_permission("send_requests"))):
+    client = get_subest_client()
+    station = client.table("stations").select("id").eq("id", data.station_id).execute()
+    if not station.data:
         raise HTTPException(status_code=404, detail="Estacion no encontrada")
 
     if data.bar_type not in ("normal", "emergency", "continuity"):
         raise HTTPException(status_code=400, detail="Tipo de barra invalido")
 
-    req = Request(
-        opersac_user_id=user.id,
-        station_id=data.station_id,
-        bar_type=data.bar_type,
-        circuit_id=data.circuit_id,
-        local_item=data.local_item,
-        requested_load_kw=data.requested_load_kw,
-        fd=data.fd,
-        sub_circuit_name=data.sub_circuit_name,
-        sub_circuit_description=data.sub_circuit_description,
-        sub_circuit_itm=data.sub_circuit_itm,
-        sub_circuit_mm2=data.sub_circuit_mm2,
-        justification=data.justification,
-        status="pending",
-    )
-    db.add(req)
-    safe_commit(db)
-    db.refresh(req)
+    payload = {
+        "opersac_user_id": str(user.id),
+        "station_id": data.station_id,
+        "bar_type": data.bar_type,
+        "circuit_id": data.circuit_id,
+        "local_item": data.local_item,
+        "requested_load_kw": float(data.requested_load_kw),
+        "fd": float(data.fd),
+        "sub_circuit_name": data.sub_circuit_name,
+        "sub_circuit_description": data.sub_circuit_description,
+        "sub_circuit_itm": data.sub_circuit_itm,
+        "sub_circuit_mm2": data.sub_circuit_mm2,
+        "justification": data.justification,
+        "status": "pending",
+    }
+    result = client.table("requests").insert(payload).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Error al crear solicitud")
+    req = result.data[0]
 
-    audit = AuditService(db)
-    audit.log(
-        user=user,
-        action="CREATE_REQUEST",
-        entity_type="request",
-        entity_id=req.id,
-        details={"station_id": data.station_id, "bar_type": data.bar_type},
-    )
-
-    return _enrich_request(req, db)
+    AuditService().log(user=user, action="CREATE_REQUEST", entity_type="request", entity_id=req["id"],
+                       details={"station_id": data.station_id, "bar_type": data.bar_type})
+    return _enrich(req, client)
 
 
-@router.put(
-    "/{request_id}/approve",
-    response_model=RequestResponse,
-    summary="Aprobar una solicitud",
-    description="""Aprueba una solicitud pendiente. Solo admin.\n\nAl aprobar:\n- Si la solicitud tiene `circuit_id`: crea un **sub-circuito** en ese circuito\n- Si no tiene `circuit_id`: crea un **nuevo circuito** en la barra de la estación\n\nLa energía de la estación se recalcula automáticamente.""",
-    response_description="Datos de la solicitud aprobada",
-    responses={400: {"description": "La solicitud no está en estado pending"}, 401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Solicitud o barra no encontrada"}},
-)
-def approve_request(
-    request_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    req = db.query(Request).filter(Request.id == request_id).first()
-    if not req:
+@router.put("/{request_id}/approve", response_model=RequestResponse)
+def approve_request(request_id: int, admin=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("requests").select("*").eq("id", request_id).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
-    if req.status != "pending":
+    req = result.data[0]
+
+    if req["status"] != "pending":
         raise HTTPException(status_code=400, detail="Solo se pueden aprobar solicitudes pendientes")
 
-    # Buscar la barra correspondiente según el tipo indicado en la solicitud
-    bar = (
-        db.query(Bar)
-        .filter(Bar.station_id == req.station_id, Bar.bar_type == req.bar_type)
-        .first()
-    )
-    if not bar:
+    bar_result = client.table("bars").select("*").eq("station_id", req["station_id"]).eq("bar_type", req["bar_type"]).execute()
+    if not bar_result.data:
         raise HTTPException(status_code=404, detail="Barra no encontrada para la estacion")
+    bar = bar_result.data[0]
 
-    # Calcular la máxima demanda a partir de la carga solicitada y el factor de demanda
-    md_kw = req.requested_load_kw * req.fd
+    md_kw = float(req["requested_load_kw"]) * float(req["fd"])
 
-    try:
-        # Determinar si se crea un nuevo circuito o un sub-circuito según si circuit_id está presente
-        if req.circuit_id:
-            # Crear sub-circuito dentro del circuito existente indicado por la solicitud
-            sub = SubCircuit(
-                circuit_id=req.circuit_id,
-                name=req.sub_circuit_name or f"Ampliacion Solicitud #{req.id}",
-                description=req.sub_circuit_description or req.justification,
-                itm=req.sub_circuit_itm,
-                mm2=req.sub_circuit_mm2,
-                pi_kw=req.requested_load_kw,
-                fd=req.fd,
-                md_kw=md_kw,
-            )
-            db.add(sub)
-            created_entity = {"sub_circuit_created": True}
-        else:
-            # Crear nuevo circuito directamente en la barra de la estación
-            circuit = Circuit(
-                bar_id=bar.id,
-                denomination=f"AMP-{req.id}",
-                name=f"Ampliacion Solicitud #{req.id}",
-                description=req.justification,
-                local_item=req.local_item,
-                pi_kw=req.requested_load_kw,
-                fd=req.fd,
-                md_kw=md_kw,
-                status="operative_normal",
-            )
-            db.add(circuit)
-            created_entity = {"circuit_created": True}
+    if req.get("circuit_id"):
+        client.table("sub_circuits").insert({
+            "circuit_id": req["circuit_id"],
+            "name": req.get("sub_circuit_name") or f"Ampliacion Solicitud #{req['id']}",
+            "description": req.get("sub_circuit_description") or req.get("justification"),
+            "itm": req.get("sub_circuit_itm"),
+            "mm2": req.get("sub_circuit_mm2"),
+            "pi_kw": float(req["requested_load_kw"]),
+            "fd": float(req["fd"]),
+            "md_kw": md_kw,
+        }).execute()
+        created_entity = {"sub_circuit_created": True}
+    else:
+        client.table("circuits").insert({
+            "bar_id": bar["id"],
+            "denomination": f"AMP-{req['id']}",
+            "name": f"Ampliacion Solicitud #{req['id']}",
+            "description": req.get("justification"),
+            "local_item": req.get("local_item"),
+            "pi_kw": float(req["requested_load_kw"]),
+            "fd": float(req["fd"]),
+            "md_kw": md_kw,
+            "status": "operative_normal",
+        }).execute()
+        created_entity = {"circuit_created": True}
 
-        # Marcar la solicitud como aprobada y registrar quién y cuándo la revisó
-        req.status = "approved"
-        req.reviewed_by = admin.id
-        req.reviewed_at = datetime.now(timezone.utc)
+    updated = client.table("requests").update({
+        "status": "approved",
+        "reviewed_by": str(admin.id),
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", request_id).execute()
 
-        db.commit()
-        db.refresh(req)
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error al aprobar la solicitud: dato duplicado o invalido")
-    except OperationalError:
-        db.rollback()
-        raise HTTPException(status_code=503, detail="Error de conexion con la base de datos al aprobar la solicitud")
+    EnergyCalculator().recalculate_station(req["station_id"])
 
-    # Recalcular la energía de la estación para reflejar la nueva carga aprobada
-    calculator = EnergyCalculator(db)
-    calculator.recalculate_station(req.station_id)
-
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="APPROVE_REQUEST",
-        entity_type="request",
-        entity_id=req.id,
-        details={**created_entity, "station_id": req.station_id},
-    )
-
-    return _enrich_request(req, db)
+    AuditService().log(user=admin, action="APPROVE_REQUEST", entity_type="request", entity_id=request_id,
+                       details={**created_entity, "station_id": req["station_id"]})
+    return _enrich(updated.data[0], client)
 
 
-@router.put(
-    "/{request_id}/reject",
-    response_model=RequestResponse,
-    summary="Rechazar una solicitud",
-    description="Rechaza una solicitud pendiente indicando el motivo. Solo admin. No crea ningún circuito ni sub-circuito.",
-    response_description="Datos de la solicitud rechazada",
-    responses={400: {"description": "La solicitud no está en estado pending"}, 401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Solicitud no encontrada"}},
-)
-def reject_request(
-    request_id: int,
-    data: RequestReject,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    req = db.query(Request).filter(Request.id == request_id).first()
-    if not req:
+@router.put("/{request_id}/reject", response_model=RequestResponse)
+def reject_request(request_id: int, data: RequestReject, admin=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("requests").select("*").eq("id", request_id).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
-    if req.status != "pending":
+    req = result.data[0]
+
+    if req["status"] != "pending":
         raise HTTPException(status_code=400, detail="Solo se pueden rechazar solicitudes pendientes")
 
-    req.status = "rejected"
-    req.rejection_reason = data.rejection_reason
-    req.reviewed_by = admin.id
-    req.reviewed_at = datetime.now(timezone.utc)
+    updated = client.table("requests").update({
+        "status": "rejected",
+        "rejection_reason": data.rejection_reason,
+        "reviewed_by": str(admin.id),
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", request_id).execute()
 
-    safe_commit(db)
-    db.refresh(req)
-
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="REJECT_REQUEST",
-        entity_type="request",
-        entity_id=req.id,
-        details={"reason": data.rejection_reason},
-    )
-
-    return _enrich_request(req, db)
+    AuditService().log(user=admin, action="REJECT_REQUEST", entity_type="request", entity_id=request_id,
+                       details={"reason": data.rejection_reason})
+    return _enrich(updated.data[0], client)

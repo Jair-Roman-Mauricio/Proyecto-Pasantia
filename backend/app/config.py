@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = "your-service-role-key-here"
     SUPABASE_JWT_SECRET: str = "your-jwt-secret-here"
 
+    # Supabase externo - schema Subest
+    SUBEST_SUPABASE_URL: str = "https://fp.lineauno.pe/supabase-api"
+    SUBEST_SUPABASE_KEY: str = ""
+
     # Storage
     STORAGE_PATH: str = "storage"
     MAX_IMAGE_SIZE_MB: int = 10

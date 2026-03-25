@@ -14,6 +14,7 @@ from app.api.v1.permissions import router as permissions_router
 from app.api.v1.backups import router as backups_router
 from app.api.v1.images import router as images_router
 from app.api.v1.reports import router as reports_router
+from app.api.v1.subest import router as subest_router
 
 api_router = APIRouter()
 
@@ -31,3 +32,4 @@ api_router.include_router(permissions_router)
 api_router.include_router(backups_router)
 api_router.include_router(images_router)
 api_router.include_router(reports_router)
+api_router.include_router(subest_router)

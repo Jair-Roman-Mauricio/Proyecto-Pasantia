@@ -2,305 +2,178 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.dependencies import get_current_user, require_admin, check_permission
-from app.models.user import User
-from app.models.bar import Bar
-from app.models.circuit import Circuit
+from app.dependencies import require_admin, check_permission
+from app.subest_client import get_subest_client
 from app.schemas.circuit import CircuitCreate, CircuitUpdate, CircuitStatusUpdate, CircuitResponse
 from app.services.energy_calculator import EnergyCalculator
 from app.services.audit_service import AuditService
-from app.utils.db_helpers import safe_commit
 
 router = APIRouter(prefix="/circuits", tags=["Circuits"])
 
 
-@router.get(
-    "/bar/{bar_id}",
-    response_model=list[CircuitResponse],
-    summary="Listar circuitos de una barra",
-    description="Retorna todos los circuitos instalados en la barra indicada, ordenados por ID. **Requiere permiso:** `view_circuits`",
-    response_description="Lista de circuitos de la barra",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_circuits no habilitado"}},
-)
-def get_circuits_by_bar(
-    bar_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(check_permission("view_circuits")),
-):
-    circuits = (
-        db.query(Circuit)
-        .filter(Circuit.bar_id == bar_id)
-        .order_by(Circuit.id)
-        .all()
-    )
-    return circuits
+@router.get("/bar/{bar_id}", response_model=list[CircuitResponse])
+def get_circuits_by_bar(bar_id: int, _=Depends(check_permission("view_circuits"))):
+    client = get_subest_client()
+    result = client.table("circuits").select("*").eq("bar_id", bar_id).order("id").execute()
+    return result.data
 
 
-@router.get(
-    "/{circuit_id}",
-    response_model=CircuitResponse,
-    summary="Obtener un circuito por ID",
-    description="Retorna los datos completos de un circuito específico. **Requiere permiso:** `view_circuits`",
-    response_description="Datos del circuito solicitado",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Permiso view_circuits no habilitado"}, 404: {"description": "Circuito no encontrado"}},
-)
-def get_circuit(
-    circuit_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(check_permission("view_circuits")),
-):
-    circuit = db.query(Circuit).filter(Circuit.id == circuit_id).first()
-    if not circuit:
+@router.get("/{circuit_id}", response_model=CircuitResponse)
+def get_circuit(circuit_id: int, _=Depends(check_permission("view_circuits"))):
+    client = get_subest_client()
+    result = client.table("circuits").select("*").eq("id", circuit_id).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Circuito no encontrado")
-    return circuit
+    return result.data[0]
 
 
-@router.post(
-    "/bar/{bar_id}",
-    response_model=CircuitResponse,
-    status_code=201,
-    summary="Crear circuito en una barra",
-    description="""Crea un nuevo circuito en la barra indicada. Solo admin.\n\n**MD:** Si no se provee `md_kw`, se calcula como `pi_kw × fd`.\n\n**Capacidad:** Si excede la disponible, retorna 400 con `requires_force: true`. Enviar `"force": true` para confirmar.\n\n**UPS:** Requiere `secondary_bar_id` y `tertiary_bar_id` distintas entre sí y a la primaria.\n\nEstados: `operative_normal`, `reserve_r`, `reserve_equipped_re`, `inactive`""",
-    response_description="Datos del circuito recién creado",
-    responses={400: {"description": "Capacidad excedida o validación UPS fallida"}, 401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Barra no encontrada"}},
-)
-def create_circuit(
-    bar_id: int,
-    data: CircuitCreate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    bar = db.query(Bar).filter(Bar.id == bar_id).first()
-    if not bar:
+@router.post("/bar/{bar_id}", response_model=CircuitResponse, status_code=201)
+def create_circuit(bar_id: int, data: CircuitCreate, admin=Depends(require_admin)):
+    client = get_subest_client()
+    bar_result = client.table("bars").select("*").eq("id", bar_id).execute()
+    if not bar_result.data:
         raise HTTPException(status_code=404, detail="Barra no encontrada")
+    bar = bar_result.data[0]
 
-    # Calcular MD automáticamente si no fue provista
     md_kw = data.md_kw if data.md_kw is not None else data.pi_kw * data.fd
 
-    # Check capacity
-    calculator = EnergyCalculator(db)
+    calculator = EnergyCalculator()
     if not data.force:
         check = calculator.check_capacity(bar_id, md_kw)
         if not check["can_add"]:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "message": check["message"],
-                    "available_before": check["available_before"],
-                    "available_after": check["available_after"],
-                    "requires_force": True,
-                },
-            )
+            raise HTTPException(status_code=400, detail={
+                "message": check["message"],
+                "available_before": check["available_before"],
+                "available_after": check["available_after"],
+                "requires_force": True,
+            })
 
-    # Validar configuración UPS (requiere barra secundaria)
     if data.is_ups:
         if not data.secondary_bar_id or not data.tertiary_bar_id:
-            raise HTTPException(
-                status_code=400,
-                detail="UPS requiere dos barras de conexion (secondary_bar_id y tertiary_bar_id)",
-            )
+            raise HTTPException(status_code=400, detail="UPS requiere dos barras de conexion")
         if data.secondary_bar_id == bar_id or data.tertiary_bar_id == bar_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Las barras de conexion deben ser diferentes a la primaria",
-            )
+            raise HTTPException(status_code=400, detail="Las barras de conexion deben ser diferentes a la primaria")
         if data.secondary_bar_id == data.tertiary_bar_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Las dos barras de conexion deben ser diferentes entre si",
-            )
+            raise HTTPException(status_code=400, detail="Las dos barras de conexion deben ser diferentes entre si")
 
     if data.status in ("reserve_r", "reserve_equipped_re") and not data.reserve_expires_at:
-        raise HTTPException(
-            status_code=400,
-            detail="Los circuitos en reserva requieren fecha de vencimiento (reserve_expires_at)",
-        )
+        raise HTTPException(status_code=400, detail="Los circuitos en reserva requieren fecha de vencimiento")
 
-    circuit = Circuit(
-        bar_id=bar_id,
-        secondary_bar_id=data.secondary_bar_id if data.is_ups else None,
-        tertiary_bar_id=data.tertiary_bar_id if data.is_ups else None,
-        denomination=data.denomination,
-        name=data.name,
-        description=data.description,
-        local_item=data.local_item,
-        pi_kw=data.pi_kw,
-        fd=data.fd,
-        md_kw=md_kw,
-        status=data.status,
-        is_ups=data.is_ups,
-    )
-
+    payload = {
+        "bar_id": bar_id,
+        "secondary_bar_id": data.secondary_bar_id if data.is_ups else None,
+        "tertiary_bar_id": data.tertiary_bar_id if data.is_ups else None,
+        "denomination": data.denomination,
+        "name": data.name,
+        "description": data.description,
+        "local_item": data.local_item,
+        "pi_kw": float(data.pi_kw),
+        "fd": float(data.fd),
+        "md_kw": float(md_kw),
+        "status": data.status,
+        "is_ups": data.is_ups,
+    }
     if data.status in ("reserve_r", "reserve_equipped_re"):
-        circuit.reserve_since = date.today()
-        circuit.reserve_expires_at = data.reserve_expires_at
+        payload["reserve_since"] = date.today().isoformat()
+        payload["reserve_expires_at"] = data.reserve_expires_at.isoformat() if data.reserve_expires_at else None
 
-    db.add(circuit)
-    safe_commit(db)
-    db.refresh(circuit)
+    result = client.table("circuits").insert(payload).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Error al crear circuito")
+    circuit = result.data[0]
 
-    # Recalcular energía de la estación
-    calculator.recalculate_station(bar.station_id)
+    calculator.recalculate_station(bar["station_id"])
 
-    # Audit
-    audit = AuditService(db)
-    audit.log(
+    AuditService().log(
         user=admin,
         action="CREATE_CIRCUIT",
         entity_type="circuit",
-        entity_id=circuit.id,
-        details={
-            "name": circuit.name,
-            "denomination": circuit.denomination,
-            "bar_id": bar_id,
-            "pi_kw": float(circuit.pi_kw),
-            "md_kw": float(circuit.md_kw),
-            "is_ups": circuit.is_ups,
-            "secondary_bar_id": circuit.secondary_bar_id,
-            "tertiary_bar_id": circuit.tertiary_bar_id,
-        },
+        entity_id=circuit["id"],
+        details={"name": circuit["name"], "bar_id": bar_id, "md_kw": float(md_kw)},
     )
-
     return circuit
 
 
-@router.put(
-    "/{circuit_id}",
-    response_model=CircuitResponse,
-    summary="Actualizar datos de un circuito",
-    description="Actualiza campos del circuito. Solo los campos incluidos en el body se modifican. Si cambia `pi_kw` o `fd` sin incluir `md_kw`, se recalcula automáticamente (`md_kw = pi_kw × fd`). Recalcula energía de la estación. Solo admin.",
-    response_description="Datos del circuito actualizado",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Circuito no encontrado"}},
-)
-def update_circuit(
-    circuit_id: int,
-    data: CircuitUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    circuit = db.query(Circuit).filter(Circuit.id == circuit_id).first()
-    if not circuit:
+@router.put("/{circuit_id}", response_model=CircuitResponse)
+def update_circuit(circuit_id: int, data: CircuitUpdate, admin=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("circuits").select("*").eq("id", circuit_id).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Circuito no encontrado")
+    circuit = result.data[0]
 
     update_data = data.model_dump(exclude_unset=True)
-
-    # Recalculate MD if PI or FD changed
     if "pi_kw" in update_data or "fd" in update_data:
-        pi = update_data.get("pi_kw", circuit.pi_kw)
-        fd = update_data.get("fd", circuit.fd)
+        pi = update_data.get("pi_kw", circuit["pi_kw"])
+        fd = update_data.get("fd", circuit["fd"])
         if "md_kw" not in update_data:
-            update_data["md_kw"] = pi * fd
+            update_data["md_kw"] = float(Decimal(str(pi)) * Decimal(str(fd)))
 
-    for field, value in update_data.items():
-        setattr(circuit, field, value)
+    # Convert Decimal/date fields to serializable types
+    for k, v in update_data.items():
+        if hasattr(v, 'isoformat'):
+            update_data[k] = v.isoformat()
+        elif isinstance(v, Decimal):
+            update_data[k] = float(v)
 
-    safe_commit(db)
-    db.refresh(circuit)
+    updated = client.table("circuits").update(update_data).eq("id", circuit_id).execute()
+    if not updated.data:
+        raise HTTPException(status_code=500, detail="Error al actualizar circuito")
 
-    # Recalcular energía de la estación
-    bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
-    calculator = EnergyCalculator(db)
-    calculator.recalculate_station(bar.station_id)
+    bar_result = client.table("bars").select("station_id").eq("id", circuit["bar_id"]).execute()
+    if bar_result.data:
+        EnergyCalculator().recalculate_station(bar_result.data[0]["station_id"])
 
-    # Audit
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="UPDATE_CIRCUIT",
-        entity_type="circuit",
-        entity_id=circuit.id,
-        details={"updated_fields": list(update_data.keys())},
-    )
-
-    return circuit
+    AuditService().log(user=admin, action="UPDATE_CIRCUIT", entity_type="circuit", entity_id=circuit_id,
+                       details={"updated_fields": list(update_data.keys())})
+    return updated.data[0]
 
 
-@router.put(
-    "/{circuit_id}/status",
-    response_model=CircuitResponse,
-    summary="Cambiar estado de un circuito",
-    description="""Cambia el estado operativo del circuito. Solo admin.\n\nEstados: `operative_normal` | `reserve_r` | `reserve_equipped_re` | `inactive`\n\nAl pasar a reserva desde `operative_normal` se registran `reserve_since` y `reserve_expires_at`. Al regresar a `operative_normal` se borran.""",
-    response_description="Datos del circuito con estado actualizado",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Circuito no encontrado"}},
-)
-def update_circuit_status(
-    circuit_id: int,
-    data: CircuitStatusUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    circuit = db.query(Circuit).filter(Circuit.id == circuit_id).first()
-    if not circuit:
+@router.put("/{circuit_id}/status", response_model=CircuitResponse)
+def update_circuit_status(circuit_id: int, data: CircuitStatusUpdate, admin=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("circuits").select("*").eq("id", circuit_id).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Circuito no encontrado")
+    circuit = result.data[0]
+    old_status = circuit["status"]
 
-    old_status = circuit.status
-    circuit.status = data.status
-
+    patch = {"status": data.status}
     if data.status in ("reserve_r", "reserve_equipped_re") and old_status == "operative_normal":
-        circuit.reserve_since = date.today()
-        circuit.reserve_expires_at = data.reserve_expires_at
+        patch["reserve_since"] = date.today().isoformat()
+        patch["reserve_expires_at"] = data.reserve_expires_at.isoformat() if data.reserve_expires_at else None
     elif data.status == "operative_normal":
-        circuit.reserve_since = None
-        circuit.reserve_expires_at = None
+        patch["reserve_since"] = None
+        patch["reserve_expires_at"] = None
 
-    safe_commit(db)
-    db.refresh(circuit)
+    updated = client.table("circuits").update(patch).eq("id", circuit_id).execute()
+    if not updated.data:
+        raise HTTPException(status_code=500, detail="Error al cambiar estado")
 
-    bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
-    calculator = EnergyCalculator(db)
-    calculator.recalculate_station(bar.station_id)
+    bar_result = client.table("bars").select("station_id").eq("id", circuit["bar_id"]).execute()
+    if bar_result.data:
+        EnergyCalculator().recalculate_station(bar_result.data[0]["station_id"])
 
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="CHANGE_CIRCUIT_STATUS",
-        entity_type="circuit",
-        entity_id=circuit.id,
-        details={"old_status": old_status, "new_status": data.status},
-    )
-
-    return circuit
+    AuditService().log(user=admin, action="CHANGE_CIRCUIT_STATUS", entity_type="circuit", entity_id=circuit_id,
+                       details={"old_status": old_status, "new_status": data.status})
+    return updated.data[0]
 
 
-@router.delete(
-    "/{circuit_id}",
-    summary="Eliminar un circuito",
-    description="Elimina permanentemente el circuito y sus sub-circuitos (cascade). Recalcula energía de la estación. ⚠ Irreversible. Solo admin.",
-    response_description="Mensaje de confirmación",
-    responses={401: {"description": "No autenticado"}, 403: {"description": "Se requiere rol admin"}, 404: {"description": "Circuito no encontrado"}},
-)
-def delete_circuit(
-    circuit_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    circuit = db.query(Circuit).filter(Circuit.id == circuit_id).first()
-    if not circuit:
+@router.delete("/{circuit_id}")
+def delete_circuit(circuit_id: int, admin=Depends(require_admin)):
+    client = get_subest_client()
+    result = client.table("circuits").select("*").eq("id", circuit_id).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Circuito no encontrado")
+    circuit = result.data[0]
 
-    bar = db.query(Bar).filter(Bar.id == circuit.bar_id).first()
-    circuit_info = {
-        "name": circuit.name,
-        "denomination": circuit.denomination,
-        "bar_id": circuit.bar_id,
-    }
+    bar_result = client.table("bars").select("station_id").eq("id", circuit["bar_id"]).execute()
+    client.table("circuits").delete().eq("id", circuit_id).execute()
 
-    db.delete(circuit)
-    safe_commit(db)
+    if bar_result.data:
+        EnergyCalculator().recalculate_station(bar_result.data[0]["station_id"])
 
-    calculator = EnergyCalculator(db)
-    calculator.recalculate_station(bar.station_id)
-
-    audit = AuditService(db)
-    audit.log(
-        user=admin,
-        action="DELETE_CIRCUIT",
-        entity_type="circuit",
-        entity_id=circuit_id,
-        details=circuit_info,
-    )
-
+    AuditService().log(user=admin, action="DELETE_CIRCUIT", entity_type="circuit", entity_id=circuit_id,
+                       details={"name": circuit["name"], "bar_id": circuit["bar_id"]})
     return {"message": "Circuito eliminado exitosamente"}

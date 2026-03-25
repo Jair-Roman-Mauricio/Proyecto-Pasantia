@@ -1,33 +1,31 @@
 import axios from 'axios';
-import { supabase } from './supabaseClient';
+
+const TOKEN_KEY = 'access_token';
+
+export const tokenStorage = {
+  get: () => localStorage.getItem(TOKEN_KEY),
+  set: (token: string) => localStorage.setItem(TOKEN_KEY, token),
+  clear: () => localStorage.removeItem(TOKEN_KEY),
+};
 
 const api = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
 });
 
-/**
- * Interceptor de solicitudes.
- * Obtiene el token de sesión actual de Supabase y lo adjunta al header Authorization.
- * Supabase refresca automáticamente el token cuando está próximo a expirar.
- */
-api.interceptors.request.use(async (config) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    config.headers.Authorization = `Bearer ${session.access_token}`;
+api.interceptors.request.use((config) => {
+  const token = tokenStorage.get();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-/**
- * Interceptor de respuestas.
- * Error 401: cierra la sesión de Supabase y redirige al login.
- */
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
+  (error) => {
     if (error.response?.status === 401) {
-      await supabase.auth.signOut();
+      tokenStorage.clear();
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }

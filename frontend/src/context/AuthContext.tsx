@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { UserBrief, Permission } from '../types';
 import { authService } from '../services/authService';
-import { supabase } from '../config/supabaseClient';
-import api from '../config/api';
+import api, { tokenStorage } from '../config/api';
 
 interface AuthContextType {
   user: UserBrief | null;
@@ -34,48 +33,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  /**
-   * Al montar: recupera la sesión activa de Supabase (si existe) y carga el perfil.
-   * Se suscribe a cambios de sesión para manejar refresh de tokens automáticamente.
-   */
+  // Al montar: recupera el token guardado en localStorage y carga el perfil.
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.access_token) {
-        setToken(session.access_token);
-        try {
-          const userData = await authService.getMe(session.access_token);
-          const userWithPerms = await loadPermissions(userData);
-          setUser(userWithPerms);
-        } catch {
-          await supabase.auth.signOut();
+    const savedToken = tokenStorage.get();
+    if (savedToken) {
+      setToken(savedToken);
+      authService.getMe(savedToken)
+        .then((userData) => loadPermissions(userData))
+        .then((userWithPerms) => setUser(userWithPerms))
+        .catch(() => {
+          tokenStorage.clear();
           setToken(null);
           setUser(null);
-        }
-      }
+        })
+        .finally(() => setIsLoading(false));
+    } else {
       setIsLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'TOKEN_REFRESHED' && session?.access_token) {
-        setToken(session.access_token);
-      } else if (event === 'SIGNED_OUT') {
-        setToken(null);
-        setUser(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    }
   }, []);
 
   const login = async (username: string, password: string) => {
     const { access_token, user: userData } = await authService.login(username, password);
+    tokenStorage.set(access_token);
     setToken(access_token);
     const userWithPerms = await loadPermissions(userData);
     setUser(userWithPerms);
   };
 
   const logout = async () => {
-    await authService.logout();
+    tokenStorage.clear();
     setToken(null);
     setUser(null);
   };

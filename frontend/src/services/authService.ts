@@ -26,13 +26,16 @@ export const authService = {
    * @returns El access_token de Supabase y los datos de perfil del backend.
    */
   async login(username: string, password: string): Promise<{ access_token: string; user: UserBrief }> {
-    const email = `${username}@linea1metro.internal`;
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data.session) {
-      throw new Error(error?.message || 'Credenciales incorrectas');
-    }
-    const user = await authService.getMe(data.session.access_token);
-    return { access_token: data.session.access_token, user };
+    const form = new URLSearchParams();
+    form.append('username', username);
+    form.append('password', password);
+    const { data } = await api.post<{ access_token: string; token_type: string }>(
+      '/auth/login',
+      form,
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    const user = await authService.getMe(data.access_token);
+    return { access_token: data.access_token, user };
   },
 
   /**
